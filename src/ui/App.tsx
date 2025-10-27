@@ -347,7 +347,8 @@ function ConsultModal({
               <>
                 <a
                   className="btn"
-                  href={`${publicBase}/consultar?code=${encodeURIComponent(resv.reservationCode)}`}
+                  //href={`${publicBase}/consultar?code=${encodeURIComponent(resv.reservationCode)}`}
+                  href={`https://reservas.mane.com.vc/consultar?code=${encodeURIComponent(resv.reservationCode)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -356,7 +357,7 @@ function ConsultModal({
                 <button
                   className="btn"
                   onClick={() => {
-                    const url = `${publicBase}/consultar?code=${encodeURIComponent(resv.reservationCode)}`;
+                    const url = `https://reservas.mane.com.vc/consultar?code=${encodeURIComponent(resv.reservationCode)}`;
                     navigator.clipboard?.writeText(url).then(
                       () => toast.success('Link copiado.'),
                       () => toast.success('Link: ' + url)
