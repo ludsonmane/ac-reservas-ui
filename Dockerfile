@@ -37,26 +37,32 @@ COPY --from=build /app/dist ./dist
 
 # ENTRYPOINT: gera __cfg.js em runtime com API_BASE_URL (override opcional)
 # Requer que seu index.html tenha: <script src="/__cfg.js"></script>
-RUN printf '%s\n' '#!/bin/sh
+RUN mkdir -p /app && cat > /app/entry.sh <<'EOF'
+#!/bin/sh
 set -eu
 
 # Preferir API_BASE_URL do ambiente (Railway). Fallback: VITE_API_BASE_URL embutido no build.
 API_BASE="${API_BASE_URL:-${VITE_API_BASE_URL:-}}"
 echo "[entry] API_BASE_URL=${API_BASE:-<vazio>}"
 
+/bin/mkdir -p /app/dist
+
 # Gera /dist/__cfg.js para o client ler em runtime
-# Se API_BASE estiver vazio, fica como undefined (não quebra chamadas relativas)
+# Se API_BASE estiver vazio, fica sem a chave (não quebra chamadas relativas)
 {
   echo "window.__CFG = Object.assign({}, window.__CFG, {"
   if [ -n "${API_BASE}" ]; then
-    echo "  API_BASE_URL: \"${API_BASE}\""
+    # escapar aspas caso venham
+    ESCAPED_API_BASE=$(printf %s "$API_BASE" | sed 's/"/\\"/g')
+    echo "  API_BASE_URL: \"${ESCAPED_API_BASE}\""
   fi
   echo "});"
 } > /app/dist/__cfg.js
 
 # Sobe SPA
-exec serve -s dist -l tcp://0.0.0.0:${PORT}
-' > /app/entry.sh && chmod +x /app/entry.sh
+exec serve -s dist -l "tcp://0.0.0.0:${PORT}"
+EOF
+RUN chmod +x /app/entry.sh
 
 EXPOSE 8080
 
