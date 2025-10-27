@@ -226,11 +226,11 @@ export async function api(path: string, opts: FetchOpts = {}) {
   }
 }
 
-/* ---------------- log útil em runtime ---------------- */
-if (typeof window !== 'undefined') {
-  if (BASE_URL) {
-    console.info('[api] Base URL:', BASE_URL);
-  } else {
-    console.warn('[api] Sem BASE_URL definida; usando chamadas relativas.');
-  }
+// constrói URL absoluta para a API (respeita window.__CFG / VITE / etc)
+export function apiUrl(path: string) {
+  const isAbs = /^https?:\/\//i.test(path);
+  if (isAbs) return path;
+  // reutiliza BASE_URL e joinUrl já definidos neste módulo
+  // @ts-ignore
+  return joinUrl(BASE_URL, path);
 }

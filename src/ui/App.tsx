@@ -1,6 +1,6 @@
 // src/ui/App.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { api, getBaseUrl } from '../lib/api';
+import { api, getBaseUrl, apiUrl } from '../lib/api';
 import { invalidate } from '../lib/query';
 import { useStore, setToken, clearAuth, setUser } from '../store';
 import type { Reservation, User } from '../types';
@@ -239,8 +239,10 @@ function ConsultModal({
     [units]
   );
 
-  const apiBase = (localStorage.getItem('BASE_URL') || getBaseUrl()).replace(/\/+$/, '');
-  const publicBase = (localStorage.getItem('PUBLIC_APP_BASE_URL') || 'http://localhost:3000').replace(/\/+$/, '');
+  const apiBase = getBaseUrl();
+  const publicBase =
+    (typeof window !== 'undefined' && (window as any).__CFG?.PUBLIC_APP_BASE_URL) ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
 
   React.useEffect(() => {
     if (!open || !code) return;
@@ -249,9 +251,10 @@ function ConsultModal({
       setError(null);
       setResv(null);
       try {
-        let r = await fetch(`${apiBase}/v1/reservations/public/lookup?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
-        if (r.status === 404) r = await fetch(`${apiBase}/v1/reservations/lookup?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
-        if (r.status === 404) r = await fetch(`${apiBase}/v1/reservations/code/${encodeURIComponent(code)}`, { cache: 'no-store' });
+        // sempre apiUrl() para prefixar com a base correta
+        let r = await fetch(apiUrl(`/v1/reservations/public/lookup?code=${encodeURIComponent(code)}`), { cache: 'no-store' });
+        if (r.status === 404) r = await fetch(apiUrl(`/v1/reservations/lookup?code=${encodeURIComponent(code)}`), { cache: 'no-store' });
+        if (r.status === 404) r = await fetch(apiUrl(`/v1/reservations/code/${encodeURIComponent(code)}`), { cache: 'no-store' });
         if (!r.ok) throw new Error(r.status === 404 ? 'Reserva não encontrada.' : 'Não foi possível carregar a reserva.');
         const data = await r.json();
         setResv(data);
@@ -464,8 +467,6 @@ function ReservationsTable({
     [units]
   );
 
-  const base = localStorage.getItem('BASE_URL') || 'http://localhost:4000';
-
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
   const [qrBust, setQrBust] = React.useState<number>(0);
 
@@ -531,7 +532,8 @@ function ReservationsTable({
 
                 const origem = (r as any).utm_source || (r as any).source || '-';
 
-                const qrUrl = `${base}/v1/reservations/${r.id}/qrcode?v=${qrBust}`;
+                // QR absoluto com apiUrl()
+                const qrUrl = apiUrl(`/v1/reservations/${r.id}/qrcode?v=${qrBust}`);
 
                 return (
                   <tr key={r.id}>
@@ -655,7 +657,7 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
               const newUnitId = e.target.value || '';
               const selected = (units as any[]).find(u => unitIdOf(u) === newUnitId);
               const legacyUnitName = selected ? unitNameOf(selected) : '';
-              if (selected) setActiveUnitPixelFromUnit(selected); // ativa pixel da unidade
+              if (selected) setActiveUnitPixelFromUnit(selected);
               onChange({ ...value, unitId: newUnitId, unit: legacyUnitName, areaId: '', page: 1 });
             }}
             disabled={loadingUnits}
@@ -815,7 +817,7 @@ function ReservationModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={editing ? 'Editar reserva' : 'Nova reserva'}>
-      <div className="card shadow-none w-full max-w-3xl md:max-w-4xl max-h-[90vh] md:max-h-[85vh] p-0 overflow-hidden flex flex-col">
+      <div className="card shadow-none w-full max-w-3xl md:max-w-4xl max-h=[90vh] md:max-h-[85vh] p-0 overflow-hidden flex flex-col">
         <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between flex-none">
           <h3 className="title text-xl m-0"> {editing ? 'Editar' : 'Nova'} Reserva</h3>
           <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Fechar</button>
@@ -962,7 +964,7 @@ function ReservationsPanel() {
     const clean = compact({
       ...filters,
       search: searchDebounced || undefined,
-      q: searchDebounced || undefined, // espelho, caso o backend espere "q"
+      q: searchDebounced || undefined,
       from: localToISOStart(filters.from),
       to: localToISOEnd(filters.to),
     });
@@ -991,7 +993,6 @@ function ReservationsPanel() {
       <div className="card">
         <h2 className="title text-2xl mb-3">Reservas</h2>
         <FiltersBar value={filters} onChange={setFilters} />
-        {/* Passa os filtros DERIVADOS pra busca */}
         <ReservationsTable
           filters={derivedFilters}
           setFilters={setFilters}
@@ -1293,7 +1294,7 @@ function LoginCard() {
     if (loading) return;
     setLoading(true);
     try {
-      const data = await api('/auth/login', { method: 'POST', body: { email, password } }); // sem auth:true
+      const data = await api('/auth/login', { method: 'POST', body: { email, password } });
       const token = pickToken(data);
       if (!token) throw new Error('Token ausente');
 
