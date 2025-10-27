@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------- Base (tema claro + fontes) --------- */
+:root { color-scheme: light; }
+body { @apply bg-bg text-text font-sans; }       /* Comfortaa via font-sans */
+.container { @apply max-w-6xl mx-auto px-4; }
+
+/* Títulos com Alfa Slab One no peso 400 */
+@layer base {
+  h1, h2, h3 { @apply font-title font-normal; }  /* Alfa Slab One */
+}
+/* utilitária para usar em qualquer lugar */
+.title { @apply font-title font-normal; }
+
+/* --------- Cards --------- */
+.card {
+  /* REMOVIDO shadow-card para tirar o brilho/sombra */
+  @apply bg-card border border-border rounded-[16px] p-5 shadow-none;
+}
+
+/* --------- Botões --------- */
+.btn {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-white hover:brightness-105 transition;
+  /* Comfortaa já é padrão no body */
+}
+.btn-primary { @apply text-white border-transparent; background: theme('colors.primary'); }
+.btn-primary:hover { background: theme('colors.primaryDark'); }
+.btn-danger { @apply bg-danger text-white border-transparent; }
+.btn-ghost { @apply bg-transparent; }
+.btn-sm { @apply text-sm px-3 py-1.5; }
+
+/* --------- Inputs --------- */
+.input, .textarea, .select {
+  /* REMOVIDO shadow-sm para tirar brilho nas bordas dos campos */
+  @apply w-full px-3 py-2.5 rounded-xl border border-border bg-white text-text;
+}
+label > span { @apply block text-sm text-muted mb-1; }
+
+/* --------- Tabela --------- */
+.table { @apply w-full text-sm; border-collapse: collapse; }
+.table th, .table td { @apply border-b border-border py-2.5 px-2.5 text-left align-middle; }
+.table th { @apply text-muted font-semibold; }
+.table tr:hover td { background: #f9f7ef; }
+
+/* --------- Badges --------- */
+.badge { @apply px-2 py-0.5 rounded-full border text-muted border-border text-xs; }
+.badge-ok { @apply text-[#0f766e] border-[#0f766e]; }
+.badge-wait { @apply text-[#a16207] border-[#f59e0b]; }
+
+/* --------- Barra de progresso --------- */
+.progress { @apply h-2 rounded-full bg-[#e8f5ea] overflow-hidden; }
+.progress > span { @apply block h-full bg-accent rounded-full; }
+
+/* --------- Skeleton --------- */
+.skeleton { @apply bg-[#ecebe5] rounded-lg relative overflow-hidden; }
+.skeleton::after {
+  content: "";
+  @apply absolute inset-0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Área com scroll suave e barra discreta */
+.scroll-area {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;              /* Firefox */
+  scrollbar-color: #d7d2c7 transparent;
+}
+
+/* WebKit */
+.scroll-area::-webkit-scrollbar {
+  width: 10px;
+}
+.scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-area::-webkit-scrollbar-thumb {
+  background: #d7d2c7;
+  border-radius: 999px;
+  border: 3px solid transparent;      /* cria “gap” visual */
+  background-clip: content-box;
+}
+.scroll-area::-webkit-scrollbar-thumb:hover {
+  background: #c9c3b6;
+  background-clip: content-box;
+}
