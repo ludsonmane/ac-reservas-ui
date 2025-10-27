@@ -2,19 +2,25 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# deps
+# 1) Dependências (cache-friendly)
 COPY package*.json ./
 RUN npm ci --no-audit --no-fund
 
-# código
+# 2) Código
 COPY . .
 
-# Vite lê VITE_* em build (ok manter), mas vamos também injetar em runtime
+# 3) Vars de build (Vite lê VITE_* em build)
 ARG VITE_API_BASE_URL
 ARG PUBLIC_APP_BASE_URL
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV PUBLIC_APP_BASE_URL=${PUBLIC_APP_BASE_URL}
 
+# 4) Falhe cedo se esquecer o VITE_API_BASE_URL
+RUN sh -lc 'test -n "$VITE_API_BASE_URL" || { echo "❌ VITE_API_BASE_URL não definido (Build Arg)"; exit 1; }'
+RUN echo "🔧 VITE_API_BASE_URL=$VITE_API_BASE_URL" && \
+    echo "🔧 PUBLIC_APP_BASE_URL=${PUBLIC_APP_BASE_URL:-<vazio>}"
+
+# 5) Build do Vite
 RUN npm run build
 
 # ---------- run ----------
@@ -24,33 +30,32 @@ ENV NODE_ENV=production
 ENV PORT=8080
 
 # servidor estático
-RUN npm i -g serve@14 && apk add --no-cache bash
+RUN npm i -g serve@14
 
-# artefatos
+# artefatos do build
 COPY --from=build /app/dist ./dist
 
-# entrypoint: gera __cfg.js com API_BASE_URL e sobe o server
-RUN printf '%s\n' '#!/usr/bin/env bash
-set -euo pipefail
+# ENTRYPOINT: gera __cfg.js em runtime com API_BASE_URL (override opcional)
+# Requer que seu index.html tenha: <script src="/__cfg.js"></script>
+RUN printf '%s\n' '#!/bin/sh
+set -eu
 
-# API_BASE_URL vem do ambiente do Railway
-: "${API_BASE_URL:=}"
-if [ -z "$API_BASE_URL" ]; then
-  # fallback para VITE_API_BASE_URL se esquecer de setar em runtime
-  API_BASE_URL="${VITE_API_BASE_URL:-}"
-fi
+# Preferir API_BASE_URL do ambiente (Railway). Fallback: VITE_API_BASE_URL embutido no build.
+API_BASE="${API_BASE_URL:-${VITE_API_BASE_URL:-}}"
+echo "[entry] API_BASE_URL=${API_BASE:-<vazio>}"
 
-echo "[entry] API_BASE_URL=${API_BASE_URL:-<vazio>}"
+# Gera /dist/__cfg.js para o client ler em runtime
+# Se API_BASE estiver vazio, fica como undefined (não quebra chamadas relativas)
+{
+  echo "window.__CFG = Object.assign({}, window.__CFG, {"
+  if [ -n "${API_BASE}" ]; then
+    echo "  API_BASE_URL: \"${API_BASE}\""
+  fi
+  echo "});"
+} > /app/dist/__cfg.js
 
-# gera /dist/__cfg.js para o client ler em runtime
-cat > /app/dist/__cfg.js <<EOF
-window.__CFG = Object.assign({}, window.__CFG, {
-  API_BASE_URL: ${API_BASE_URL:+\"$API_BASE_URL\"}
-});
-EOF
-
-# sobe SPA
-exec serve -s dist -l "tcp://0.0.0.0:${PORT}"
+# Sobe SPA
+exec serve -s dist -l tcp://0.0.0.0:${PORT}
 ' > /app/entry.sh && chmod +x /app/entry.sh
 
 EXPOSE 8080

@@ -1265,39 +1265,46 @@ function LoginCard() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  function pickToken(obj: any): string | null {
+    if (!obj || typeof obj !== 'object') return null;
+    const direct = obj.token ?? obj.accessToken ?? obj.access_token ?? obj.jwt ?? obj.JWT ?? null;
+    if (typeof direct === 'string' && direct) return direct;
+
+    if (obj.token && typeof obj.token === 'object') {
+      const nested = obj.token.accessToken ?? obj.token.access_token ?? obj.token.value ?? null;
+      if (typeof nested === 'string' && nested) return nested;
+    }
+    if (obj.data) {
+      const fromData = pickToken(obj.data);
+      if (fromData) return fromData;
+    }
+    const JWT_RE = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/;
+    for (const v of Object.values(obj)) {
+      if (typeof v === 'string' && JWT_RE.test(v)) return v;
+      if (v && typeof v === 'object') {
+        const deep = pickToken(v);
+        if (deep) return deep;
+      }
+    }
+    return null;
+  }
+
   async function doLogin() {
     if (loading) return;
     setLoading(true);
     try {
-      const data = await api('/auth/login', {
-        method: 'POST',
-        body: { email, password }, // sem auth:true aqui
-      });
-
-      const token =
-        data?.token ??
-        data?.accessToken ??
-        data?.access_token ??
-        null;
-
+      const data = await api('/auth/login', { method: 'POST', body: { email, password } }); // sem auth:true
+      const token = pickToken(data);
       if (!token) throw new Error('Token ausente');
 
-      // garante persistência
       try { localStorage.setItem('token', token); } catch { }
-
       setToken(token);
-      setUser(data.user as User);
+      setUser((data?.user as User) ?? data?.data?.user ?? null);
 
       invalidate('*');
       toast.success('Login realizado com sucesso!');
-      // redirecione se quiser, ex: navigate('/reservas');
     } catch (e: any) {
-      console.error(e);
-      const msg =
-        e?.error?.error ||
-        e?.error?.message ||
-        e?.message ||
-        'Falha no login. Verifique email e senha.';
+      const msg = e?.error?.error || e?.error?.message || e?.message || 'Falha no login.';
       toast.error(msg);
     } finally {
       setLoading(false);
