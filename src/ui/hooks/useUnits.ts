@@ -9,7 +9,6 @@ export type UnitOption = { id: string; name: string; slug: string };
  * Retorna as unidades como objetos { id, name, slug } para selects/filtros.
  * - Key estável: "units:all"
  * - topics: ['units'] para reagir a invalidate('units')
- * - Sem keepPreviousData para não grudar snapshot antigo após writes
  * - Fallback: público -> autenticado paginado
  */
 export function useUnits(enabled: boolean = true) {
@@ -44,10 +43,7 @@ export function useUnits(enabled: boolean = true) {
     {
       enabled,
       topics: ['units'],
-      keepPreviousData: false,
       staleTime: 0,
-      refetchOnFocus: true,
-      refetchOnReconnect: true,
     }
   );
 

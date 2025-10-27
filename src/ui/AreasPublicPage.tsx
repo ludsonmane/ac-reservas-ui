@@ -5,7 +5,7 @@ import { useAreasByUnit } from './hooks/useAreasByUnit';
 import Skeleton from './Skeleton';
 
 export default function AreasPublicPage() {
-  const [unitId, setUnitId] = React.useState<string | ''>('');
+  const [unitId, setUnitId] = React.useState<string>('');
   const { units, loading: loadingUnits } = useUnits(true);
   const { data: areas, loading: loadingAreas } = useAreasByUnit(unitId || undefined, !!unitId);
 
@@ -49,13 +49,17 @@ export default function AreasPublicPage() {
       )}
 
       {unitId && (loadingAreas ? (
-        <Skeleton rows={6} />
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-full" />
+          ))}
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="table w-full">
             <thead>
               <tr>
-                <th style={{width: 84}}>Foto</th>
+                <th style={{ width: 84 }}>Foto</th>
                 <th>Nome</th>
                 <th className="text-right" title="Capacidade geral (fallback)">Cap.</th>
                 <th className="text-right" title="Capacidade Tarde">Tarde</th>
@@ -89,7 +93,11 @@ export default function AreasPublicPage() {
                 </tr>
               ))}
               {areas && areas.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">Nenhuma área cadastrada.</td></tr>
+                <tr>
+                  <td colSpan={6} className="text-center text-sm text-muted-foreground py-8">
+                    Nenhuma área cadastrada.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

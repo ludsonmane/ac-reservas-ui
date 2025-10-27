@@ -7,6 +7,16 @@ import Skeleton from './Skeleton';
 import { useUsers } from './hooks/useUsers';
 import { PencilIcon, TrashIcon } from './icons';
 
+/* ---------- Tipos locais ---------- */
+type UsersFilters = {
+  page: number;
+  pageSize: number;
+  search: string;
+  active: 'all' | 'true' | 'false';
+  /** chave só para forçar re-busca; o hook original pode não conhecer essa prop */
+  refreshKey?: number;
+};
+
 /* ---------- Loading central (overlay) ---------- */
 function CenterLoading({
   open,
@@ -238,11 +248,17 @@ function UserModal({
 
 /* ---------- Página ---------- */
 export default function UsersPage() {
-  const [filters, setFilters] = React.useState({ page: 1, pageSize: 20, search: '', active: 'all' });
+  const [filters, setFilters] = React.useState<UsersFilters>({
+    page: 1,
+    pageSize: 20,
+    search: '',
+    active: 'all',
+  });
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  const { data, loading } = useUsers({ ...filters, refreshKey });
+  // Passa refreshKey apenas para forçar nova key/sinal pro hook (cast para não brigar com o tipo dele)
+  const { data, loading } = useUsers({ ...filters, refreshKey } as any);
   const pageData = data || { page: 1, totalPages: 1, total: 0, items: [] as any[] };
 
   // 🔄 lista local + assinatura p/ sincronizar só quando muda de verdade
@@ -369,7 +385,7 @@ export default function UsersPage() {
               <select
                 className="input"
                 value={filters.active}
-                onChange={e => setFilters({ ...filters, active: e.target.value, page: 1 })}
+                onChange={e => setFilters({ ...filters, active: e.target.value as UsersFilters['active'], page: 1 })}
               >
                 <option value="all">Todos</option>
                 <option value="true">Somente ativos</option>

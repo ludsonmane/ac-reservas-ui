@@ -14,7 +14,6 @@ import { useAreasByUnit } from './hooks/useAreasByUnit';
 import AreasPage from './AreasPage';
 import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
-import maneLogoUrl from '../public/img/1.png';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 
 /* ---------- helpers de data ---------- */
@@ -125,7 +124,7 @@ function Topbar() {
         <a href="/" className="group inline-flex items-center gap-3" title="Mané • Admin Reservas">
           <div className="relative">
             <img
-              src={maneLogoUrl}
+              src="/img/1.png"
               alt="Mané Mercado"
               className="h-10 w-auto md:h-11 block transition-transform duration-200 group-hover:scale-[1.02]"
             />
