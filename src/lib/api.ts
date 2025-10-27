@@ -11,36 +11,38 @@ export type FetchOpts = {
 };
 
 type AnyObj = Record<string, any>;
+
 declare global {
   interface Window {
     __CFG?: { API_BASE_URL?: string };
   }
 }
 
-/* ---------------- Base URL resolution (sem process.*) ---------------- */
+/* ---------------- Base URL resolution ---------------- */
 function sanitizeBase(b?: string | null) {
   const s = (b || '').trim();
-  if (!s) return '';
-  return s.replace(/\/+$/, ''); // sem barra no final
+  return s ? s.replace(/\/+$/, '') : '';
 }
 
 const fromRuntime = typeof window !== 'undefined' ? window.__CFG?.API_BASE_URL : '';
 const fromStorage = typeof window !== 'undefined' ? localStorage.getItem('BASE_URL') : '';
 const fromVite = (import.meta as AnyObj)?.env?.VITE_API_BASE_URL as string | undefined;
 
-/** Ordem de precedência:
- *  1) window.__CFG.API_BASE_URL (runtime override opcional)
- *  2) localStorage.BASE_URL (runtime persistente)
- *  3) import.meta.env.VITE_API_BASE_URL (build-time)
- *  4) vazio → chamadas relativas (útil no dev com proxy do Vite)
+/** Ordem:
+ * 1) window.__CFG.API_BASE_URL
+ * 2) localStorage.BASE_URL
+ * 3) import.meta.env.VITE_API_BASE_URL
+ * 4) vazio → chamadas relativas
  */
-let BASE_URL = sanitizeBase(fromRuntime) || sanitizeBase(fromStorage) || sanitizeBase(fromVite) || '';
+let BASE_URL =
+  sanitizeBase(fromRuntime) ||
+  sanitizeBase(fromStorage) ||
+  sanitizeBase(fromVite) ||
+  '';
 
 export function setBaseUrl(url: string) {
   const clean = sanitizeBase(url);
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('BASE_URL', clean);
-  }
+  try { localStorage.setItem('BASE_URL', clean); } catch {}
   BASE_URL = clean;
 }
 
@@ -49,7 +51,7 @@ export function getBaseUrl() {
 }
 
 function getToken() {
-  return (typeof window !== 'undefined' && localStorage.getItem('token')) || '';
+  try { return localStorage.getItem('token') || ''; } catch { return ''; }
 }
 
 /* ---------------- helpers ---------------- */
@@ -77,34 +79,23 @@ function handleWriteInvalidation(path: string, method: string) {
   }
 }
 
-/* ---------------- throttling básico para /areas/by-unit ---------------- */
+/* ---------------- throttling /areas/by-unit ---------------- */
 const reqThrottle = {
   map: new Map<string, number>(),
   tooManyUntil: new Map<string, number>(),
-  inc(key: string) {
-    const n = (this.map.get(key) || 0) + 1;
-    this.map.set(key, n);
-    return n;
-  },
-  reset(key: string) {
-    this.map.delete(key);
-    this.tooManyUntil.delete(key);
-  },
+  inc(key: string) { const n = (this.map.get(key) || 0) + 1; this.map.set(key, n); return n; },
+  reset(key: string) { this.map.delete(key); this.tooManyUntil.delete(key); },
 };
 
 /* ---------------- sessão expirada ---------------- */
 const AUTH_EXPIRED_EVENT = 'auth:expired';
 let lastAuthNotifyAt = 0;
 function handleAuthExpiry(detail?: any) {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('token');
-    const now = Date.now();
-    if (now - lastAuthNotifyAt > 1500) {
-      lastAuthNotifyAt = now;
-      try {
-        window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail }));
-      } catch { /* ignore */ }
-    }
+  try { localStorage.removeItem('token'); } catch {}
+  const now = Date.now();
+  if (now - lastAuthNotifyAt > 1500) {
+    lastAuthNotifyAt = now;
+    try { window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail })); } catch {}
   }
 }
 
@@ -182,8 +173,9 @@ export async function api(path: string, opts: FetchOpts = {}) {
   }
 
   const ct = res.headers.get('content-type') || '';
+  const looksJson = (s: string) => /^[\s]*[{\[]/.test(s);
 
-  // JSON
+  // Se o servidor informou JSON, usa res.json(); senão, tenta parsear manualmente se “parece” JSON
   if (ct.includes('application/json')) {
     let data: any;
     try {
@@ -206,29 +198,32 @@ export async function api(path: string, opts: FetchOpts = {}) {
 
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) handleAuthExpiry(data);
-      throw { status: res.status, ...data };
+      throw { status: res.status, ...(typeof data === 'object' ? data : { error: String(data) }) };
     }
 
     handleWriteInvalidation(path, method);
     return data;
+  } else {
+    // Texto/binário (com fallback para JSON mal tipado)
+    const raw = await res.text();
+    const parsed = looksJson(raw) ? (JSON.parse(raw) as any) : raw;
+
+    if (res.status === 429 && isAreasByUnit) {
+      reqThrottle.tooManyUntil.set(url, Date.now() + 2000);
+    } else if (isAreasByUnit) {
+      reqThrottle.reset(url);
+    }
+
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) handleAuthExpiry(parsed);
+      // mantém forma parecida com ramo JSON
+      const errMsg = typeof parsed === 'string' ? parsed : (parsed?.error || parsed?.message || 'Erro');
+      throw { status: res.status, error: errMsg };
+    }
+
+    handleWriteInvalidation(path, method);
+    return parsed;
   }
-
-  // Texto/binário
-  const text = await res.text();
-
-  if (res.status === 429 && isAreasByUnit) {
-    reqThrottle.tooManyUntil.set(url, Date.now() + 2000);
-  } else if (isAreasByUnit) {
-    reqThrottle.reset(url);
-  }
-
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) handleAuthExpiry({ error: text || res.statusText });
-    throw { status: res.status, error: text || res.statusText };
-  }
-
-  handleWriteInvalidation(path, method);
-  return text;
 }
 
 /* ---------------- log útil em runtime ---------------- */
