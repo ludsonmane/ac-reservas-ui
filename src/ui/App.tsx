@@ -1269,13 +1269,28 @@ function LoginCard() {
     if (loading) return;
     setLoading(true);
     try {
-      const data = await api('/auth/login', { method: 'POST', body: { email, password } });
-      const token = data.accessToken || data.token;
+      const data = await api('/auth/login', {
+        method: 'POST',
+        body: { email, password }, // sem auth:true aqui
+      });
+
+      const token =
+        data?.token ??
+        data?.accessToken ??
+        data?.access_token ??
+        null;
+
       if (!token) throw new Error('Token ausente');
+
+      // garante persistência
+      try { localStorage.setItem('token', token); } catch { }
+
       setToken(token);
       setUser(data.user as User);
+
       invalidate('*');
       toast.success('Login realizado com sucesso!');
+      // redirecione se quiser, ex: navigate('/reservas');
     } catch (e: any) {
       console.error(e);
       const msg =
@@ -1288,7 +1303,6 @@ function LoginCard() {
       setLoading(false);
     }
   }
-
   return (
     <section className="container mt-6">
       <LoadingDialog open={loading} title="Entrando..." message="Validando suas credenciais. Aguarde um instante." />
