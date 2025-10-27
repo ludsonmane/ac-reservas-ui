@@ -10,11 +10,38 @@ export type FetchOpts = {
   timeoutMs?: number;
 };
 
-let BASE_URL = localStorage.getItem('BASE_URL') || 'http://localhost:4000';
+type AnyObj = Record<string, any>;
+declare global {
+  interface Window {
+    __CFG?: { API_BASE_URL?: string };
+  }
+}
+
+/* ---------------- Base URL resolution (sem process.*) ---------------- */
+function sanitizeBase(b?: string | null) {
+  const s = (b || '').trim();
+  if (!s) return '';
+  return s.replace(/\/+$/, ''); // sem barra no final
+}
+
+const fromRuntime = typeof window !== 'undefined' ? window.__CFG?.API_BASE_URL : '';
+const fromStorage = typeof window !== 'undefined' ? localStorage.getItem('BASE_URL') : '';
+const fromVite = (import.meta as AnyObj)?.env?.VITE_API_BASE_URL as string | undefined;
+
+/** Ordem de precedência:
+ *  1) window.__CFG.API_BASE_URL (runtime override opcional)
+ *  2) localStorage.BASE_URL (runtime persistente)
+ *  3) import.meta.env.VITE_API_BASE_URL (build-time)
+ *  4) vazio → chamadas relativas (útil no dev com proxy do Vite)
+ */
+let BASE_URL = sanitizeBase(fromRuntime) || sanitizeBase(fromStorage) || sanitizeBase(fromVite) || '';
 
 export function setBaseUrl(url: string) {
-  localStorage.setItem('BASE_URL', url);
-  BASE_URL = url;
+  const clean = sanitizeBase(url);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('BASE_URL', clean);
+  }
+  BASE_URL = clean;
 }
 
 export function getBaseUrl() {
@@ -22,20 +49,25 @@ export function getBaseUrl() {
 }
 
 function getToken() {
-  return localStorage.getItem('token') || '';
+  return (typeof window !== 'undefined' && localStorage.getItem('token')) || '';
 }
 
-// ---- helpers de cache/invalidacao
+/* ---------------- helpers ---------------- */
+function joinUrl(base: string, path: string) {
+  if (!base) return path; // chamada relativa
+  const b = base.replace(/\/+$/, '');
+  const p = path.replace(/^\/+/, '');
+  return `${b}/${p}`;
+}
+
 function topicFromPath(path: string): string | null {
-  const p = path.startsWith('http') ? new URL(path).pathname : path;
+  const p = /^https?:\/\//i.test(path) ? new URL(path).pathname : path;
   const clean = p.split('?')[0];
   const parts = clean.split('/').filter(Boolean);
   if (parts[0] === 'v1' && parts[1]) return parts[1];
   return null;
 }
-function isAbsoluteUrl(s: string) {
-  return /^https?:\/\//i.test(s);
-}
+
 function handleWriteInvalidation(path: string, method: string) {
   const m = (method || 'GET').toUpperCase();
   if (m !== 'GET') {
@@ -45,7 +77,7 @@ function handleWriteInvalidation(path: string, method: string) {
   }
 }
 
-// ---- controle simples de flood 429 no endpoint by-unit
+/* ---------------- throttling básico para /areas/by-unit ---------------- */
 const reqThrottle = {
   map: new Map<string, number>(),
   tooManyUntil: new Map<string, number>(),
@@ -57,29 +89,29 @@ const reqThrottle = {
   reset(key: string) {
     this.map.delete(key);
     this.tooManyUntil.delete(key);
-  }
+  },
 };
 
-// ---- evento de expiração de sessão
+/* ---------------- sessão expirada ---------------- */
 const AUTH_EXPIRED_EVENT = 'auth:expired';
 let lastAuthNotifyAt = 0;
 function handleAuthExpiry(detail?: any) {
-  // remove token local; App vai renderizar tela de login
-  localStorage.removeItem('token');
-  // evita múltiplos toasts em rajada
-  const now = Date.now();
-  if (now - lastAuthNotifyAt > 1500) {
-    lastAuthNotifyAt = now;
-    try {
-      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail }));
-    } catch {
-      // ignore
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('token');
+    const now = Date.now();
+    if (now - lastAuthNotifyAt > 1500) {
+      lastAuthNotifyAt = now;
+      try {
+        window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail }));
+      } catch { /* ignore */ }
     }
   }
 }
 
+/* ---------------- cliente ---------------- */
 export async function api(path: string, opts: FetchOpts = {}) {
-  const url = isAbsoluteUrl(path) ? path : `${BASE_URL}${path}`;
+  const isAbs = /^https?:\/\//i.test(path);
+  const url = isAbs ? path : joinUrl(BASE_URL, path);
   const method = (opts.method || 'GET').toUpperCase();
 
   const headers: Record<string, string> = { ...(opts.headers || {}) };
@@ -98,11 +130,11 @@ export async function api(path: string, opts: FetchOpts = {}) {
 
   const init: RequestInit = { method, headers };
 
-  // Body: respeita FormData / Blob
+  // Body: respeita FormData / Blob / ArrayBuffer
   if (opts.body !== undefined && opts.body !== null) {
     const isFormData = typeof FormData !== 'undefined' && opts.body instanceof FormData;
     const isBlob = typeof Blob !== 'undefined' && opts.body instanceof Blob;
-    const isArrayBuffer = opts.body instanceof ArrayBuffer;
+    const isArrayBuffer = typeof ArrayBuffer !== 'undefined' && opts.body instanceof ArrayBuffer;
 
     if (isFormData || isBlob || isArrayBuffer) {
       init.body = opts.body as any;
@@ -122,7 +154,6 @@ export async function api(path: string, opts: FetchOpts = {}) {
 
   let res: Response;
   try {
-    // se 429 recente, devolve erro direto para evitar flood
     if (isAreasByUnit) {
       const until = reqThrottle.tooManyUntil.get(url) || 0;
       if (Date.now() < until) {
@@ -167,7 +198,6 @@ export async function api(path: string, opts: FetchOpts = {}) {
       return undefined;
     }
 
-    // trata 429 para endpoint ruidoso
     if (res.status === 429 && isAreasByUnit) {
       reqThrottle.tooManyUntil.set(url, Date.now() + 2000);
     } else if (isAreasByUnit) {
@@ -175,10 +205,7 @@ export async function api(path: string, opts: FetchOpts = {}) {
     }
 
     if (!res.ok) {
-      // trata expiração/forbidden
-      if (res.status === 401 || res.status === 403) {
-        handleAuthExpiry(data);
-      }
+      if (res.status === 401 || res.status === 403) handleAuthExpiry(data);
       throw { status: res.status, ...data };
     }
 
@@ -189,7 +216,6 @@ export async function api(path: string, opts: FetchOpts = {}) {
   // Texto/binário
   const text = await res.text();
 
-  // trata 429 para endpoint ruidoso (texto)
   if (res.status === 429 && isAreasByUnit) {
     reqThrottle.tooManyUntil.set(url, Date.now() + 2000);
   } else if (isAreasByUnit) {
@@ -197,12 +223,19 @@ export async function api(path: string, opts: FetchOpts = {}) {
   }
 
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      handleAuthExpiry({ error: text || res.statusText });
-    }
+    if (res.status === 401 || res.status === 403) handleAuthExpiry({ error: text || res.statusText });
     throw { status: res.status, error: text || res.statusText };
   }
 
   handleWriteInvalidation(path, method);
   return text;
+}
+
+/* ---------------- log útil em runtime ---------------- */
+if (typeof window !== 'undefined') {
+  if (BASE_URL) {
+    console.info('[api] Base URL:', BASE_URL);
+  } else {
+    console.warn('[api] Sem BASE_URL definida; usando chamadas relativas.');
+  }
 }
