@@ -1308,10 +1308,13 @@ function NavTabs({
 }
 
 /* ---------- Login ---------- */
+/* ---------- Login ---------- */
 function LoginCard() {
-  const [email, setEmail] = useState('admin@mane.com.vc');
+  const [email, setEmail] = useState('admin@mane.com.vc'); // ou '' se preferir vazio
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
   function pickToken(obj: any): string | null {
     if (!obj || typeof obj !== 'object') return null;
@@ -1337,11 +1340,19 @@ function LoginCard() {
     return null;
   }
 
+  const emailTrim = email.trim();
+  const passTrim = password.trim();
+  const emailOk = isEmail(emailTrim);
+  const passOk = passTrim.length >= 6; // ajuste a regra mínima se quiser
+  const canSubmit = emailOk && passOk && !loading;
+
   async function doLogin() {
-    if (loading) return;
+    if (!emailOk) { toast.error('Informe um e-mail válido.'); return; }
+    if (!passOk) { toast.error('Informe a senha (mín. 6 caracteres).'); return; }
+
     setLoading(true);
     try {
-      const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+      const data = await api('/auth/login', { method: 'POST', body: { email: emailTrim, password: passTrim } });
       const token = pickToken(data);
       if (!token) throw new Error('Token ausente');
 
@@ -1358,38 +1369,61 @@ function LoginCard() {
       setLoading(false);
     }
   }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (canSubmit) doLogin();
+    else {
+      if (!emailOk) toast.error('Informe um e-mail válido.');
+      else if (!passOk) toast.error('Informe a senha (mín. 6 caracteres).');
+    }
+  }
+
   return (
     <section className="container mt-6">
       <LoadingDialog open={loading} title="Entrando..." message="Validando suas credenciais. Aguarde um instante." />
-      <div className="card max-w-lg mx-auto">
+      <form className="card max-w-lg mx-auto" onSubmit={onSubmit} noValidate>
         <h2 className="title text-2xl mb-3">Login</h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="col-span-2">
             <span>E-mail</span>
-            <input className="input" value="" onChange={(e) => setEmail(e.target.value)} type="email" required disabled={loading} aria-disabled={loading} aria-busy={loading} autoFocus />
+            <input
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              required
+              disabled={loading}
+              aria-invalid={email.length > 0 && !emailOk}
+              autoFocus
+              placeholder="seuemail@exemplo.com"
+            />
           </label>
+
           <label className="col-span-2">
             <span>Senha</span>
             <input
               className="input"
-              value=""
+              value={password}
               onChange={(e) => setPassword(e.target.value)}
               type="password"
               required
               disabled={loading}
-              aria-disabled={loading}
-              aria-busy={loading}
-              onKeyDown={(e) => { if (e.key === 'Enter') doLogin(); }}
+              aria-invalid={password.length > 0 && !passOk}
+              placeholder="Sua senha"
+              onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(e as any); }}
             />
           </label>
+
           <div className="col-span-2 flex justify-end gap-2">
-            <button className="btn btn-primary" disabled={loading} onClick={doLogin}>
+            <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
               {loading ? 'Entrando…' : 'Entrar'}
             </button>
           </div>
+
           <p className="text-muted text-sm col-span-2">Use as credenciais do /auth/login.</p>
         </div>
-      </div>
+      </form>
     </section>
   );
 }
