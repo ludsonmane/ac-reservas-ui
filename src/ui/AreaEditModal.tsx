@@ -1,4 +1,5 @@
 import * as React from 'react';
+import IconPicker from './components/IconPicker'; // ajuste o path conforme sua estrutura
 
 type Area = {
   id: string;
@@ -125,18 +126,24 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
           </div>
 
           <div className="grid gap-1">
-            <label className="label">Ícone da área (emoji)</label>
-            <input
-              className="input"
-              type="text"
-              maxLength={16}
-              placeholder="Ex.: 🍺, 🎸, 🪑"
-              value={form.iconEmoji ?? ''}
-              onChange={(e) => onChange('iconEmoji', e.target.value)}
+            <IconPicker
+              label="Ícone da área"
+              value={form.iconEmoji ?? null}
+              onChange={(emoji) => onChange('iconEmoji', emoji)}
+              placeholder="Escolha um emoji"
             />
-            <p className="text-xs text-muted-foreground">
-              Dica: use um emoji simples pra identificar a área.
-            </p>
+            <p className="text-xs text-muted-foreground">Dica: use um emoji simples pra identificação rápida (ex.: 🍺 Deck Chopes, 🎸 Palco, 🪑 Salão).</p>
+          </div>
+
+          <div className="grid gap-1">
+            <label className="label">Descrição da área</label>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder="Ex.: Deck externo coberto, próximo ao palco; ideal para grupos."
+              value={form.description ?? ''}
+              onChange={(e) => onChange('description', e.target.value)}
+            />
           </div>
 
           <div className="grid gap-1">
