@@ -1320,13 +1320,13 @@ function LoginCard() {
         <div className="grid grid-cols-2 gap-3">
           <label className="col-span-2">
             <span>E-mail</span>
-            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} type="email" required disabled={loading} aria-disabled={loading} aria-busy={loading} autoFocus />
+            <input className="input" value="" onChange={(e) => setEmail(e.target.value)} type="email" required disabled={loading} aria-disabled={loading} aria-busy={loading} autoFocus />
           </label>
           <label className="col-span-2">
             <span>Senha</span>
             <input
               className="input"
-              value={password}
+              value=""
               onChange={(e) => setPassword(e.target.value)}
               type="password"
               required
