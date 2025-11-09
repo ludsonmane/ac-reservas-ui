@@ -115,6 +115,6 @@ export function useAreasAdmin(filters: AreaFilters) {
       },
     loading,
     error,
-    refetch,
+    refetch, 
   };
 }
