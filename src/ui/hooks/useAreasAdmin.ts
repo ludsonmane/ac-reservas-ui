@@ -9,6 +9,8 @@ export type AreaFilters = {
   unitId?: string | '';
   search?: string | '';
   active?: '' | boolean;
+  /** tick opcional para forçar revalidação (ex.: após salvar/excluir) */
+  _rt?: number;
 };
 
 export type AreaItem = {
@@ -22,7 +24,7 @@ export type AreaItem = {
   isActive: boolean;
   createdAt?: string;
 
-  // NOVOS:
+  // ✅ NOVOS CAMPOS
   iconEmoji?: string | null;
   description?: string | null;
 };
@@ -44,8 +46,9 @@ export function useAreasAdmin(filters: AreaFilters) {
         u: filters.unitId || '',
         q: filters.search || '',
         a: filters.active === '' ? '' : !!filters.active,
+        rt: filters._rt ?? 0, // 👈 garante refetch quando _rt muda
       })}`,
-    [filters.page, filters.pageSize, filters.unitId, filters.search, filters.active]
+    [filters.page, filters.pageSize, filters.unitId, filters.search, filters.active, filters._rt]
   );
 
   const { data, loading, error, refetch } = useQuery<AreasPage>(
@@ -59,35 +62,43 @@ export function useAreasAdmin(filters: AreaFilters) {
       if (filters.active !== '' && typeof filters.active === 'boolean') {
         params.set('active', String(filters.active));
       }
+      // cache-buster para evitar respostas em cache do navegador/proxy
+      params.set('__ts', String(Date.now()));
 
       // 🔐 precisa de auth para admin
       const res = await api(`/v1/areas?${params.toString()}`, { auth: true });
 
-      // normaliza estrutura — aceita { items } ou { data }
       const rawItems = res?.items ?? res?.data ?? [];
+      const items: AreaItem[] = (rawItems as any[]).map((a) => ({
+        id: String(a.id ?? a._id),
+        name: String(a.name ?? ''),
+        unitId: String(a.unitId ?? a.unit?.id ?? ''),
+        unitName: a.unitName ?? a.unit?.name ?? a.unit ?? undefined,
+        photoUrl: a.photoUrl ?? null,
+        capacityAfternoon:
+          a.capacityAfternoon !== undefined
+            ? (a.capacityAfternoon ?? null)
+            : (a.capacity_afternoon ?? null),
+        capacityNight:
+          a.capacityNight !== undefined
+            ? (a.capacityNight ?? null)
+            : (a.capacity_night ?? null),
+        isActive: !!(a.isActive ?? a.active ?? true),
+        createdAt: a.createdAt ?? a.created_at ?? undefined,
+
+        // ✅ NOVOS CAMPOS (camel + snake)
+        iconEmoji: a.iconEmoji ?? a.icon_emoji ?? null,
+        description: a.description ?? null,
+      }));
+
       const page: AreasPage = {
-        items: rawItems.map((a: any) => ({
-          id: String(a.id ?? a._id),
-          name: String(a.name ?? ''),
-          unitId: String(a.unitId ?? a.unit?.id ?? ''),
-          unitName: a.unitName ?? a.unit?.name ?? a.unit ?? undefined,
-          photoUrl: a.photoUrl ?? null,
-          capacityAfternoon:
-            a.capacityAfternoon !== undefined
-              ? (a.capacityAfternoon ?? null)
-              : (a.capacity_afternoon ?? null),
-          capacityNight:
-            a.capacityNight !== undefined
-              ? (a.capacityNight ?? null)
-              : (a.capacity_night ?? null),
-          isActive: !!(a.isActive ?? a.active ?? true),
-          createdAt: a.createdAt ?? a.created_at ?? undefined,
-        })),
-        total: Number(res?.total ?? res?.count ?? rawItems.length ?? 0),
+        items,
+        total: Number(res?.total ?? res?.count ?? items.length ?? 0),
         page: Number(res?.page ?? 1),
         pageSize: Number(res?.pageSize ?? res?.limit ?? 10),
         totalPages: Number(res?.totalPages ?? res?.pages ?? 1),
       };
+
       return page;
     },
     { enabled: true, topics: ['areas', 'units'] }
