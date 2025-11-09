@@ -15,6 +15,17 @@ type AreaPublic = {
   description?: string | null;
 };
 
+// Type guard para o TS estreitar corretamente
+function isAreaPublicArray(x: unknown): x is AreaPublic[] {
+  return Array.isArray(x) && x.every(
+    (i) =>
+      i &&
+      typeof i === 'object' &&
+      'id' in i &&
+      'name' in i
+  );
+}
+
 export default function AreasPublicPage() {
   const [unitId, setUnitId] = React.useState<string>('');
   const { units, loading: loadingUnits } = useUnits(true);
@@ -25,6 +36,9 @@ export default function AreasPublicPage() {
       setUnitId(units[0].id);
     }
   }, [units, unitId]);
+
+  // ✅ Normaliza a lista com type guard (sem casts problemáticos)
+  const list: AreaPublic[] = isAreaPublicArray(areas) ? areas : [];
 
   return (
     <section className="p-4">
@@ -78,7 +92,7 @@ export default function AreasPublicPage() {
               </tr>
             </thead>
             <tbody>
-              {(areas as AreaPublic[] ?? []).map((a) => (
+              {list.map((a) => (
                 <tr key={a.id}>
                   <td>
                     {a.photoUrl ? (
@@ -113,7 +127,8 @@ export default function AreasPublicPage() {
                   </td>
                 </tr>
               ))}
-              {areas && (areas as AreaPublic[]).length === 0 && (
+
+              {list.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center text-sm text-muted-foreground py-8">
                     Nenhuma área cadastrada.
