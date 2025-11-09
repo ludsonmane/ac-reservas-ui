@@ -1310,7 +1310,7 @@ function NavTabs({
 /* ---------- Login ---------- */
 /* ---------- Login ---------- */
 function LoginCard() {
-  const [email, setEmail] = useState('admin@mane.com.vc'); // ou '' se preferir vazio
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -1382,7 +1382,7 @@ function LoginCard() {
   return (
     <section className="container mt-6">
       <LoadingDialog open={loading} title="Entrando..." message="Validando suas credenciais. Aguarde um instante." />
-      <form className="card max-w-lg mx-auto" onSubmit={onSubmit} noValidate>
+      <form className="card max-w-lg mx-auto" onSubmit={onSubmit} noValidate autoComplete="off">
         <h2 className="title text-2xl mb-3">Login</h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="col-span-2">
@@ -1393,6 +1393,7 @@ function LoginCard() {
               onChange={(e) => setEmail(e.target.value)}
               type="email"
               required
+              autoComplete="username"
               disabled={loading}
               aria-invalid={email.length > 0 && !emailOk}
               autoFocus
@@ -1409,6 +1410,7 @@ function LoginCard() {
               type="password"
               required
               disabled={loading}
+              autoComplete="current-password"
               aria-invalid={password.length > 0 && !passOk}
               placeholder="Sua senha"
               onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(e as any); }}
