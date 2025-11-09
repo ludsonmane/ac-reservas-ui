@@ -7,6 +7,7 @@
 body { @apply bg-bg text-text font-sans; }       /* Comfortaa via font-sans */
 .container { @apply max-w-6xl mx-auto px-4; }
 
+.table th, .table td { padding: 8px 12px; }
 /* Títulos com Alfa Slab One no peso 400 */
 @layer base {
   h1, h2, h3 { @apply font-title font-normal; }  /* Alfa Slab One */
