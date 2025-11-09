@@ -53,7 +53,7 @@ function ConfirmDialog({
 
   const confirmBtnClass =
     variant === 'danger' ? 'btn btn-danger' :
-    variant === 'primary' ? 'btn btn-primary' : 'btn';
+      variant === 'primary' ? 'btn btn-primary' : 'btn';
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
@@ -181,6 +181,8 @@ function AreasTable({
           <thead>
             <tr>
               <th>Área</th>
+              <th className="text-left p-2">Ícone</th>
+              <th className="text-left p-2">Descrição</th>
               <th className="text-right">Tarde</th>
               <th className="text-right">Noite</th>
               <th>Unidade</th>
@@ -219,6 +221,12 @@ function AreasTable({
                 return (
                   <tr key={a.id}>
                     <td className="font-medium">{a.name}</td>
+                    <td className="p-2 text-xl">{a.iconEmoji ?? '—'}</td>
+                    <td className="p-2 max-w-[360px]">
+                      <span className="line-clamp-2 text-sm text-muted-foreground">
+                        {a.description || '—'}
+                      </span>
+                    </td>
                     <td className="text-right">{a.capacityAfternoon ?? '—'}</td>
                     <td className="text-right">{a.capacityNight ?? '—'}</td>
                     <td>{unidade}</td>

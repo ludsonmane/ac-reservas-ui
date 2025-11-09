@@ -82,6 +82,15 @@ export default function AreasPublicPage() {
                     )}
                   </td>
                   <td>{a.name}</td>
+                  <td className="p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{a.iconEmoji ?? '🏷️'}</span>
+                      <span className="font-medium">{a.name}</span>
+                    </div>
+                    {a.description && (
+                      <p className="text-xs text-muted-foreground mt-1">{a.description}</p>
+                    )}
+                  </td>
                   <td className="text-right">{a.capacity ?? '—'}</td>
                   <td className="text-right">{a.capacityAfternoon ?? '—'}</td>
                   <td className="text-right">{a.capacityNight ?? '—'}</td>

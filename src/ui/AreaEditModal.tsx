@@ -8,6 +8,8 @@ type Area = {
   capacityAfternoon: number | null;
   capacityNight: number | null;
   isActive: boolean;
+  iconEmoji?: string | null;
+  description?: string | null;
 };
 
 type Props = {
@@ -53,6 +55,8 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
           capacityAfternoon: numOrNull(form.capacityAfternoon),
           capacityNight: numOrNull(form.capacityNight),
           isActive: !!form.isActive,
+          iconEmoji: (form.iconEmoji ?? '').trim() || null,
+          description: (form.description ?? '').trim() || null,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -117,6 +121,32 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
               value={form.name || ''}
               onChange={(e) => onChange('name', e.target.value)}
               required
+            />
+          </div>
+
+          <div className="grid gap-1">
+            <label className="label">Ícone da área (emoji)</label>
+            <input
+              className="input"
+              type="text"
+              maxLength={16}
+              placeholder="Ex.: 🍺, 🎸, 🪑"
+              value={form.iconEmoji ?? ''}
+              onChange={(e) => onChange('iconEmoji', e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Dica: use um emoji simples pra identificar a área.
+            </p>
+          </div>
+
+          <div className="grid gap-1">
+            <label className="label">Descrição</label>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder="Ex.: Deck externo coberto, vista para o palco…"
+              value={form.description ?? ''}
+              onChange={(e) => onChange('description', e.target.value)}
             />
           </div>
 

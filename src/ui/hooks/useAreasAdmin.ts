@@ -21,6 +21,10 @@ export type AreaItem = {
   capacityNight: number | null;
   isActive: boolean;
   createdAt?: string;
+
+  // NOVOS:
+  iconEmoji?: string | null;
+  description?: string | null;
 };
 
 export type AreasPage = {
