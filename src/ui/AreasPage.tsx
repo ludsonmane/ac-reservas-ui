@@ -349,7 +349,7 @@ function AreaModal({
     const fd = new FormData();
     fd.append('file', file); // field esperado pelo multer do mane-api
 
-    const res = await fetch(`${API_BASE}/v1/areas/${areaId}/photo`, {
+    const res = await fetch(`${API_BASE}/v1/areas/${areaId}/photo?__ts=${Date.now()}`, {
       method: 'POST',
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -381,9 +381,9 @@ function AreaModal({
       let areaId = form.id as string | undefined;
 
       if (form.id) {
-        await api(`/v1/areas/${form.id}`, { method: 'PUT', body: payload, auth: true });
+        await api(`/v1/areas/${form.id}?__ts=${Date.now()}`, { method: 'PUT', body: payload, auth: true });
       } else {
-        const created = await api('/v1/areas', { method: 'POST', body: payload, auth: true });
+        const created = await api(`/v1/areas?__ts=${Date.now()}`, { method: 'POST', body: payload, auth: true });
         areaId = created?.id;
       }
 
@@ -392,7 +392,7 @@ function AreaModal({
       }
 
       toast.success(form.id ? 'Área atualizada.' : 'Área criada.');
-      onSaved();
+      onSaved();    // ← dispara o refresh imediato
       onClose();
     } catch (e: any) {
       console.error(e);
@@ -543,6 +543,10 @@ export default function AreasPage() {
     active: '',
   });
 
+  // 🔁 tick de atualização para forçar revalidação do hook de listagem
+  const [refreshTick, setRefreshTick] = React.useState(0);
+  const bump = React.useCallback(() => setRefreshTick((t) => t + 1), []);
+
   const [showModal, setShowModal] = React.useState(false);
   const [editing, setEditing] = React.useState<any | null>(null);
 
@@ -552,17 +556,22 @@ export default function AreasPage() {
   const [deleting, setDeleting] = React.useState(false);
 
   const { units, loading: loadingUnits } = useUnits(true);
-  const tableFilters = React.useMemo(() => ({ ...filters, set: setFilters }), [filters]);
+
+  // injeta _rt para o hook perceber mudança SEMPRE que algo for salvo/alterado
+  const tableFilters = React.useMemo(
+    () => ({ ...filters, _rt: refreshTick, set: setFilters } as AreaFilters & { _rt: number; set: any }),
+    [filters, refreshTick]
+  );
 
   const handleToggle = async (areaId: string, next: boolean) => {
     try {
-      await api(`/v1/areas/${areaId}`, {
+      await api(`/v1/areas/${areaId}?__ts=${Date.now()}`, {
         method: 'PUT',
         body: { isActive: next },
         auth: true,
       });
-    toast.success(next ? 'Área ativada.' : 'Área desativada.');
-      setFilters((f) => ({ ...f })); // revalidar
+      toast.success(next ? 'Área ativada.' : 'Área desativada.');
+      bump(); // 🔁 força refresh imediato
     } catch (e: any) {
       console.error(e);
       toast.error('Erro ao alterar status da área.');
@@ -580,11 +589,11 @@ export default function AreasPage() {
     if (!deleteTarget || deleting) return;
     try {
       setDeleting(true);
-      await api(`/v1/areas/${deleteTarget.id}`, { method: 'DELETE', auth: true });
+      await api(`/v1/areas/${deleteTarget.id}?__ts=${Date.now()}`, { method: 'DELETE', auth: true });
       toast.success('Área excluída.');
-      setFilters((f) => ({ ...f })); // revalidar
       setDeleteOpen(false);
       setDeleteTarget(null);
+      bump(); // 🔁 força refresh imediato
     } catch (e: any) {
       console.error(e);
       toast.error(e?.userMessage || e?.message || 'Erro ao excluir a área.');
@@ -599,7 +608,7 @@ export default function AreasPage() {
         <h2 className="title text-2xl mb-3">Áreas</h2>
         <FiltersBar
           value={filters}
-          onChange={setFilters}
+          onChange={(v) => setFilters(v)}
           onCreate={() => { setEditing(null); setShowModal(true); }}
           units={units}
           loadingUnits={loadingUnits}
@@ -617,7 +626,7 @@ export default function AreasPage() {
         open={showModal}
         onClose={() => setShowModal(false)}
         editing={editing}
-        onSaved={() => setFilters((f) => ({ ...f }))}
+        onSaved={() => bump()}  // 🔁 refresh assim que salvar/criar
         units={units}
         loadingUnits={loadingUnits}
       />
