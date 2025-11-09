@@ -452,6 +452,7 @@ function ConfirmDialog({
 }
 
 /* ---------- Tabela de Reservas ---------- */
+/* ---------- Tabela de Reservas (c/ "Criada em" + badge "hoje") ---------- */
 function ReservationsTable({
   filters, setFilters, onConsult, onAskDelete,
 }: {
@@ -471,6 +472,8 @@ function ReservationsTable({
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
   const [qrBust, setQrBust] = React.useState<number>(0);
 
+  const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+
   return (
     <>
       <div className="overflow-x-auto">
@@ -480,6 +483,7 @@ function ReservationsTable({
               <th>Code</th>
               <th>Cliente</th>
               <th>Reserva</th>
+              <th>Criada em</th> {/* 👈 nova coluna */}
               <th>Pessoas</th>
               <th>Unidade</th>
               <th>Área</th>
@@ -504,6 +508,7 @@ function ReservationsTable({
                     </div>
                   </td>
                   <td><Skeleton className="h-4 w-28" /></td>
+                  <td><Skeleton className="h-4 w-28" /></td> {/* skeleton da “Criada em” */}
                   <td><Skeleton className="h-4 w-10" /></td>
                   <td><Skeleton className="h-4 w-20" /></td>
                   <td><Skeleton className="h-4 w-24" /></td>
@@ -527,13 +532,16 @@ function ReservationsTable({
                 const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : 'badge-wait';
                 const when = new Date(r.reservationDate).toLocaleString();
 
+                const createdDt = (r as any).createdAt ? new Date((r as any).createdAt) : null;
+                const createdStr = createdDt ? createdDt.toLocaleString() : '—';
+                const showToday = createdDt ? isSameDay(createdDt, new Date()) : false;
+
                 const unitLabel =
                   (r as any).unitId ? (unitsById[(r as any).unitId] ?? undefined) :
                     (r as any).unitName ?? (r as any).unit ?? '-';
 
                 const origem = (r as any).utm_source || (r as any).source || '-';
 
-                // QR absoluto com apiUrl()
                 const qrUrl = apiUrl(`/v1/reservations/${r.id}/qrcode?v=${qrBust}`);
 
                 return (
@@ -557,6 +565,7 @@ function ReservationsTable({
                         <span className="text-muted">-</span>
                       )}
                     </td>
+
                     <td>
                       <div className="flex items-center gap-2">
                         <img src={qrUrl} className="h-11 w-11 rounded border border-border" crossOrigin="anonymous" />
@@ -568,7 +577,16 @@ function ReservationsTable({
                         </div>
                       </div>
                     </td>
+
                     <td>{when}</td>
+
+                    <td>
+                      <span>{createdStr}</span>
+                      {showToday && (
+                        <span className="badge badge-ok ml-2">hoje</span>
+                      )}
+                    </td>
+
                     <td>{r.people}{r.kids ? ` (+${r.kids})` : ''}</td>
                     <td>{unitLabel || '-'}</td>
                     <td>{(r as any).areaName || (r as any).area || '-'}</td>
@@ -584,7 +602,7 @@ function ReservationsTable({
                   </tr>
                 );
               })}
-              {data.items.length === 0 && <tr><td colSpan={9}>Sem resultados</td></tr>}
+              {data.items.length === 0 && <tr><td colSpan={10}>Sem resultados</td></tr>}
             </tbody>
           )}
         </table>
