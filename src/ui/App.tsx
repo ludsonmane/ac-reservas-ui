@@ -16,6 +16,7 @@ import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 
+
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
   const d = new Date(iso);
@@ -129,6 +130,7 @@ function Topbar() {
               className="h-10 w-auto md:h-11 block transition-transform duration-200 group-hover:scale-[1.02]"
             />
             <span className="pointer-events-none absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 [box-shadow:0_0_0_6px_rgba(34,197,94,0.08)_inset]" />
+            
           </div>
           <div className="hidden sm:block leading-tight">
             <div className="text-base font-medium">Admin Reservas</div>
