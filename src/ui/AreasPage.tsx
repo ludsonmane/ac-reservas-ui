@@ -8,6 +8,7 @@ import { useStore } from '../store';
 import { PencilIcon, PowerIcon, TrashIcon } from './icons';
 import Toggle from './Toggle';
 import { useAreasAdmin, type AreaFilters } from './hooks/useAreasAdmin';
+import IconPicker from './components/IconPicker'; // ⬅️ ajuste o path se necessário
 
 type AreaForm = {
   id?: string;
@@ -17,6 +18,9 @@ type AreaForm = {
   capacityNight: number | null;
   isActive: boolean;
   photoFile?: File | null; // só para upload
+  // NOVOS CAMPOS:
+  iconEmoji?: string | null;
+  description?: string | null;
 };
 
 /* ---------- ConfirmDialog (bonitão) ---------- */
@@ -162,7 +166,7 @@ function AreasTable({
   filters: AreaFilters & { set?: (v: AreaFilters) => void };
   onEdit: (area: any) => void;
   onToggle: (areaId: string, next: boolean) => Promise<void>;
-  onDelete: (area: any) => void; // ← agora manda o objeto inteiro para o modal
+  onDelete: (area: any) => void;
   units: { id: string; name: string }[];
 }) {
   const { data, loading } = useAreasAdmin(filters);
@@ -198,10 +202,12 @@ function AreasTable({
                 <tr key={`sk-${i}`}>
                   <td><Skeleton className="h-4 w-40" /></td>
                   <td><Skeleton className="h-4 w-12" /></td>
-                  <td><Skeleton className="h-4 w-12" /></td>
-                  <td><Skeleton className="h-4 w-36" /></td>
-                  <td><Skeleton className="h-5 w-16" /></td>
+                  <td><Skeleton className="h-4 w-52" /></td>
+                  <td><Skeleton className="h-4 w-16" /></td>
+                  <td><Skeleton className="h-4 w-16" /></td>
                   <td><Skeleton className="h-4 w-28" /></td>
+                  <td><Skeleton className="h-4 w-16" /></td>
+                  <td><Skeleton className="h-4 w-24" /></td>
                   <td className="text-right">
                     <div className="flex gap-2 justify-end">
                       <Skeleton className="h-7 w-7" />
@@ -261,7 +267,7 @@ function AreasTable({
                 );
               })}
               {page.items.length === 0 && (
-                <tr><td colSpan={7}>Sem resultados</td></tr>
+                <tr><td colSpan={9}>Sem resultados</td></tr>
               )}
             </tbody>
           )}
@@ -318,6 +324,8 @@ function AreaModal({
     capacityNight: null,
     isActive: true,
     photoFile: null,
+    iconEmoji: null,
+    description: '',
   });
   const [saving, setSaving] = React.useState(false);
 
@@ -332,6 +340,8 @@ function AreaModal({
         capacityNight: editing.capacityNight ?? null,
         isActive: !!editing.isActive,
         photoFile: null,
+        iconEmoji: editing.iconEmoji ?? null,
+        description: editing.description ?? '',
       });
     } else {
       setForm({
@@ -341,6 +351,8 @@ function AreaModal({
         capacityNight: null,
         isActive: true,
         photoFile: null,
+        iconEmoji: null,
+        description: '',
       });
     }
   }, [open, editing]);
@@ -380,10 +392,12 @@ function AreaModal({
       const payload: any = {
         unitId: form.unitId,
         name: form.name.trim(),
-        capacity: null, // não usamos mais 'capacity'
         capacityAfternoon: asNumOrNull(form.capacityAfternoon),
         capacityNight: asNumOrNull(form.capacityNight),
         isActive: !!form.isActive,
+        // NOVOS CAMPOS:
+        iconEmoji: (form.iconEmoji ?? '') ? String(form.iconEmoji) : null,
+        description: (form.description ?? '').trim() || null,
       };
 
       let areaId = form.id as string | undefined;
@@ -400,7 +414,7 @@ function AreaModal({
       }
 
       toast.success(form.id ? 'Área atualizada.' : 'Área criada.');
-      onSaved();    // ← dispara o refresh imediato
+      onSaved();    // 🔁 dispara o refresh imediato
       onClose();
     } catch (e: any) {
       console.error(e);
@@ -414,7 +428,7 @@ function AreaModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="card shadow-none w-full max-w-xl max-h-[85vh] p-0 overflow-hidden flex flex-col">
+      <div className="card shadow-none w-full max-w-xl max-h[85vh] p-0 overflow-hidden flex flex-col">
         <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
           <h3 className="title text-xl m-0">{form.id ? 'Editar' : 'Nova'} Área</h3>
           <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Fechar</button>
@@ -444,6 +458,32 @@ function AreaModal({
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
                 placeholder="Ex.: Varanda, Salão Principal…"
+                disabled={saving}
+              />
+            </label>
+
+            {/* Ícone da área */}
+            <div className="md:col-span-2">
+              <IconPicker
+                label="Ícone da área"
+                value={form.iconEmoji ?? null}
+                onChange={(emoji) => set('iconEmoji', emoji)}
+                placeholder="Escolha um emoji"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Dica: use um emoji simples pra identificação rápida (ex.: 🍺 Deck Chopes, 🎸 Palco, 🪑 Salão).
+              </p>
+            </div>
+
+            {/* Descrição da área */}
+            <label className="md:col-span-2">
+              <span>Descrição</span>
+              <textarea
+                className="input py-2"
+                rows={3}
+                placeholder="Ex.: Deck externo coberto, próximo ao palco; ideal para grupos."
+                value={form.description ?? ''}
+                onChange={(e) => set('description', e.target.value)}
                 disabled={saving}
               />
             </label>

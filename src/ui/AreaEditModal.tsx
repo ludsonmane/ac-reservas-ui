@@ -5,7 +5,7 @@ type Area = {
   id: string;
   name: string;
   photoUrl: string | null;
-  capacity: number | null;
+  capacity: number | null; // Fallback local (UI)
   capacityAfternoon: number | null;
   capacityNight: number | null;
   isActive: boolean;
@@ -36,7 +36,7 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
   if (!open || !form) return null;
 
   function onChange<K extends keyof Area>(key: K, value: Area[K]) {
-    setForm(prev => prev ? { ...prev, [key]: value } : prev);
+    setForm(prev => (prev ? { ...prev, [key]: value } : prev));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -46,23 +46,30 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
     setSaving(true);
     setError(null);
     try {
+      // Fallback: se 'capacityAfternoon' e/ou 'capacityNight' estiverem vazios,
+      // usa 'capacity' (UI) como preenchimento.
+      const capFallback = numOrNull(form.capacity);
+      const capAfternoon = numOrNull(form.capacityAfternoon ?? capFallback);
+      const capNight = numOrNull(form.capacityNight ?? capFallback);
+
       const res = await fetch(`${apiBase}/v1/areas/${form.id}`, {
-        method: 'PATCH',
+        method: 'PUT', // ✅ a API expõe PUT, não PATCH
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           name: form.name,
-          capacity: numOrNull(form.capacity),
-          capacityAfternoon: numOrNull(form.capacityAfternoon),
-          capacityNight: numOrNull(form.capacityNight),
+          capacityAfternoon: capAfternoon,
+          capacityNight: capNight,
           isActive: !!form.isActive,
           iconEmoji: (form.iconEmoji ?? '').trim() || null,
           description: (form.description ?? '').trim() || null,
+          // NÃO enviar 'capacity' — a API não tem esse campo
         }),
       });
+
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(payload?.message || 'Falha ao salvar área');
+        throw new Error(payload?.error || payload?.message || 'Falha ao salvar área');
       }
       onSaved(payload);
       onClose();
@@ -90,11 +97,9 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(payload?.message || 'Falha no upload');
+        throw new Error(payload?.error || payload?.message || 'Falha no upload');
       }
-      // API costuma retornar a área atualizada; se não, faça um refetch fora.
       onSaved(payload);
-      // zera input pra poder reenviar se quiser
       if (fileRef.current) fileRef.current.value = '';
       setForm(payload);
     } catch (err: any) {
@@ -132,7 +137,9 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
               onChange={(emoji) => onChange('iconEmoji', emoji)}
               placeholder="Escolha um emoji"
             />
-            <p className="text-xs text-muted-foreground">Dica: use um emoji simples pra identificação rápida (ex.: 🍺 Deck Chopes, 🎸 Palco, 🪑 Salão).</p>
+            <p className="text-xs text-muted-foreground">
+              Dica: use um emoji simples pra identificação rápida (ex.: 🍺 Deck Chopes, 🎸 Palco, 🪑 Salão).
+            </p>
           </div>
 
           <div className="grid gap-1">
@@ -147,25 +154,19 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
           </div>
 
           <div className="grid gap-1">
-            <label className="label">Descrição</label>
-            <textarea
-              className="input"
-              rows={3}
-              placeholder="Ex.: Deck externo coberto, vista para o palco…"
-              value={form.description ?? ''}
-              onChange={(e) => onChange('description', e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-1">
             <label className="label">Capacidade (fallback)</label>
             <input
               className="input"
               type="number"
               min={0}
               value={form.capacity ?? ''}
-              onChange={(e) => onChange('capacity', e.target.value === '' ? null : Number(e.target.value))}
+              onChange={(e) =>
+                onChange('capacity', e.target.value === '' ? null : Number(e.target.value))
+              }
             />
+            <p className="text-xs text-muted-foreground">
+              Se “Cap. Tarde” e/ou “Cap. Noite” estiverem vazias, usaremos este valor.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -176,7 +177,9 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
                 type="number"
                 min={0}
                 value={form.capacityAfternoon ?? ''}
-                onChange={(e) => onChange('capacityAfternoon', e.target.value === '' ? null : Number(e.target.value))}
+                onChange={(e) =>
+                  onChange('capacityAfternoon', e.target.value === '' ? null : Number(e.target.value))
+                }
               />
             </div>
             <div className="grid gap-1">
@@ -186,7 +189,9 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
                 type="number"
                 min={0}
                 value={form.capacityNight ?? ''}
-                onChange={(e) => onChange('capacityNight', e.target.value === '' ? null : Number(e.target.value))}
+                onChange={(e) =>
+                  onChange('capacityNight', e.target.value === '' ? null : Number(e.target.value))
+                }
               />
             </div>
           </div>

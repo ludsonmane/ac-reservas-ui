@@ -4,6 +4,17 @@ import { useUnits } from './hooks/useUnits';
 import { useAreasByUnit } from './hooks/useAreasByUnit';
 import Skeleton from './Skeleton';
 
+type AreaPublic = {
+  id: string;
+  name: string;
+  photoUrl?: string | null;
+  capacityAfternoon?: number | null;
+  capacityNight?: number | null;
+  isActive: boolean;
+  iconEmoji?: string | null;
+  description?: string | null;
+};
+
 export default function AreasPublicPage() {
   const [unitId, setUnitId] = React.useState<string>('');
   const { units, loading: loadingUnits } = useUnits(true);
@@ -60,15 +71,14 @@ export default function AreasPublicPage() {
             <thead>
               <tr>
                 <th style={{ width: 84 }}>Foto</th>
-                <th>Nome</th>
-                <th className="text-right" title="Capacidade geral (fallback)">Cap.</th>
+                <th>Área</th>
                 <th className="text-right" title="Capacidade Tarde">Tarde</th>
                 <th className="text-right" title="Capacidade Noite">Noite</th>
                 <th className="text-center">Status</th>
               </tr>
             </thead>
             <tbody>
-              {(areas ?? []).map((a: any) => (
+              {(areas as AreaPublic[] ?? []).map((a) => (
                 <tr key={a.id}>
                   <td>
                     {a.photoUrl ? (
@@ -81,7 +91,8 @@ export default function AreasPublicPage() {
                       <span className="text-xs text-muted-foreground">sem foto</span>
                     )}
                   </td>
-                  <td>{a.name}</td>
+
+                  {/* Coluna: Área (ícone + nome + descrição) */}
                   <td className="p-2">
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">{a.iconEmoji ?? '🏷️'}</span>
@@ -91,9 +102,10 @@ export default function AreasPublicPage() {
                       <p className="text-xs text-muted-foreground mt-1">{a.description}</p>
                     )}
                   </td>
-                  <td className="text-right">{a.capacity ?? '—'}</td>
+
                   <td className="text-right">{a.capacityAfternoon ?? '—'}</td>
                   <td className="text-right">{a.capacityNight ?? '—'}</td>
+
                   <td className="text-center">
                     <span className={`badge ${a.isActive ? 'badge-success' : ''}`}>
                       {a.isActive ? 'Ativa' : 'Inativa'}
@@ -101,9 +113,9 @@ export default function AreasPublicPage() {
                   </td>
                 </tr>
               ))}
-              {areas && areas.length === 0 && (
+              {areas && (areas as AreaPublic[]).length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center text-sm text-muted-foreground py-8">
+                  <td colSpan={5} className="text-center text-sm text-muted-foreground py-8">
                     Nenhuma área cadastrada.
                   </td>
                 </tr>
