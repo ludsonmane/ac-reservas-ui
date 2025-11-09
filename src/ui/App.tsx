@@ -453,6 +453,7 @@ function ConfirmDialog({
 
 /* ---------- Tabela de Reservas ---------- */
 /* ---------- Tabela de Reservas (c/ "Criada em" + badge "hoje") ---------- */
+/* ---------- Tabela de Reservas (ajustada) ---------- */
 function ReservationsTable({
   filters, setFilters, onConsult, onAskDelete,
 }: {
@@ -472,7 +473,18 @@ function ReservationsTable({
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
   const [qrBust, setQrBust] = React.useState<number>(0);
 
-  const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  function isToday(iso?: string | null) {
+    if (!iso) return false;
+    const d = new Date(iso);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear()
+      && d.getMonth() === now.getMonth()
+      && d.getDate() === now.getDate();
+  }
+  function fmtDateTime(iso?: string | null) {
+    if (!iso) return '-';
+    try { return new Date(iso).toLocaleString(); } catch { return '-'; }
+  }
 
   return (
     <>
@@ -480,16 +492,17 @@ function ReservationsTable({
         <table className="table">
           <thead>
             <tr>
-              <th>Code</th>
-              <th>Cliente</th>
-              <th>Reserva</th>
-              <th>Criada em</th> {/* 👈 nova coluna */}
-              <th>Pessoas</th>
-              <th>Unidade</th>
-              <th>Área</th>
-              <th>Origem</th>
-              <th>Status</th>
-              <th></th>
+              {/* 👇 Criada em VEM PRIMEIRO */}
+              <th className="px-3 py-2 whitespace-nowrap">Criada em</th>
+              <th className="px-3 py-2">Code</th>
+              <th className="px-3 py-2">Cliente</th>
+              <th className="px-3 py-2">Reserva</th>
+              <th className="px-3 py-2">Pessoas</th>
+              <th className="px-3 py-2">Unidade</th>
+              <th className="px-3 py-2">Área</th>
+              <th className="px-3 py-2">Origem</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
 
@@ -497,8 +510,9 @@ function ReservationsTable({
             <tbody>
               {Array.from({ length: 6 }).map((_, i) => (
                 <tr key={`sk-${i}`}>
-                  <td><Skeleton className="h-5 w-16" /></td>
-                  <td>
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-28" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-5 w-16" /></td>
+                  <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Skeleton className="h-11 w-11" />
                       <div className="flex flex-col gap-2">
@@ -507,14 +521,13 @@ function ReservationsTable({
                       </div>
                     </div>
                   </td>
-                  <td><Skeleton className="h-4 w-28" /></td>
-                  <td><Skeleton className="h-4 w-28" /></td> {/* skeleton da “Criada em” */}
-                  <td><Skeleton className="h-4 w-10" /></td>
-                  <td><Skeleton className="h-4 w-20" /></td>
-                  <td><Skeleton className="h-4 w-24" /></td>
-                  <td><Skeleton className="h-4 w-24" /></td>
-                  <td><Skeleton className="h-5 w-20" /></td>
-                  <td className="text-right">
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-28" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-10" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-20" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-5 w-20" /></td>
+                  <td className="px-3 py-2 text-right">
                     <div className="flex gap-2 justify-end">
                       <Skeleton className="h-8 w-8 rounded-full" />
                       <Skeleton className="h-8 w-8 rounded-full" />
@@ -532,21 +545,33 @@ function ReservationsTable({
                 const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : 'badge-wait';
                 const when = new Date(r.reservationDate).toLocaleString();
 
-                const createdDt = (r as any).createdAt ? new Date((r as any).createdAt) : null;
-                const createdStr = createdDt ? createdDt.toLocaleString() : '—';
-                const showToday = createdDt ? isSameDay(createdDt, new Date()) : false;
-
                 const unitLabel =
-                  (r as any).unitId ? (unitsById[(r as any).unitId] ?? undefined) :
-                    (r as any).unitName ?? (r as any).unit ?? '-';
+                  (r as any).unitId ? (unitsById[(r as any).unitId] ?? undefined)
+                    : (r as any).unitName ?? (r as any).unit ?? '-';
 
                 const origem = (r as any).utm_source || (r as any).source || '-';
+
+                // normalização createdAt (o hook já tenta, mas garantimos aqui também)
+                const createdAt =
+                  (r as any).createdAt ?? (r as any).created_at ?? (r as any).created ?? null;
 
                 const qrUrl = apiUrl(`/v1/reservations/${r.id}/qrcode?v=${qrBust}`);
 
                 return (
                   <tr key={r.id}>
-                    <td>
+                    {/* 👇 PRIMEIRA COLUNA: Criada em */}
+                    <td className="px-3 py-2 whitespace-nowrap align-top min-w-[150px]">
+                      <div className="flex items-center gap-2">
+                        <span>{fmtDateTime(createdAt)}</span>
+                        {isToday(createdAt) && (
+                          <span className="inline-flex items-center rounded-full border px-2 py-[2px] text-xs tracking-wide text-emerald-700 border-emerald-200 bg-emerald-50">
+                            hoje
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-2 align-top whitespace-nowrap min-w-[92px]">
                       {r.reservationCode ? (
                         <button
                           type="button"
@@ -566,33 +591,32 @@ function ReservationsTable({
                       )}
                     </td>
 
-                    <td>
+                    <td className="px-3 py-2 align-top min-w-[260px]">
                       <div className="flex items-center gap-2">
-                        <img src={qrUrl} className="h-11 w-11 rounded border border-border" crossOrigin="anonymous" />
-                        <div>
+                        <img
+                          src={qrUrl}
+                          className="h-11 w-11 rounded border border-border"
+                          crossOrigin="anonymous"
+                          alt=""
+                        />
+                        <div className="leading-tight">
                           <div className="font-medium">{r.fullName}</div>
-                          <div className="text-muted text-xs">
+                          <div className="text-muted text-xs whitespace-nowrap overflow-hidden text-ellipsis max-w-[260px]">
                             {r.email || ''}{r.phone ? ' • ' + r.phone : ''}
                           </div>
                         </div>
                       </div>
                     </td>
 
-                    <td>{when}</td>
-
-                    <td>
-                      <span>{createdStr}</span>
-                      {showToday && (
-                        <span className="badge badge-ok ml-2">hoje</span>
-                      )}
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{when}</td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{r.people}{r.kids ? ` (+${r.kids})` : ''}</td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{unitLabel || '-'}</td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{(r as any).areaName || (r as any).area || '-'}</td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{origem}</td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">
+                      <span className={`badge ${statusClass}`}>{r.status}</span>
                     </td>
-
-                    <td>{r.people}{r.kids ? ` (+${r.kids})` : ''}</td>
-                    <td>{unitLabel || '-'}</td>
-                    <td>{(r as any).areaName || (r as any).area || '-'}</td>
-                    <td>{origem}</td>
-                    <td><span className={`badge ${statusClass}`}>{r.status}</span></td>
-                    <td className="text-right">
+                    <td className="px-3 py-2 text-right align-top">
                       <div className="flex gap-2 justify-end">
                         <IconBtn title="Editar" onClick={() => setFilters({ ...filters, showModal: true, editing: r })}><PencilIcon /></IconBtn>
                         <IconBtn title="Renovar QR" onClick={() => setRenewTarget(r)}><RefreshIcon /></IconBtn>
@@ -602,7 +626,11 @@ function ReservationsTable({
                   </tr>
                 );
               })}
-              {data.items.length === 0 && <tr><td colSpan={10}>Sem resultados</td></tr>}
+              {data.items.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-3 py-4 text-center text-muted">Sem resultados</td>
+                </tr>
+              )}
             </tbody>
           )}
         </table>
