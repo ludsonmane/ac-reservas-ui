@@ -125,7 +125,7 @@ function Topbar() {
         <a href="/" className="group inline-flex items-center gap-3" title="Mané • Admin Reservas">
           <div className="relative">
             <img
-              src="/img/1.png"
+              src="https://reservas.mane.com.vc/_next/image?url=%2Fimages%2F1.png&w=256&q=75"
               alt="Mané Mercado"
               className="h-10 w-auto md:h-11 block transition-transform duration-200 group-hover:scale-[1.02]"
             />
