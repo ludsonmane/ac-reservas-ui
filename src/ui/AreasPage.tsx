@@ -8,7 +8,7 @@ import { useStore } from '../store';
 import { PencilIcon, PowerIcon, TrashIcon } from './icons';
 import Toggle from './Toggle';
 import { useAreasAdmin, type AreaFilters } from './hooks/useAreasAdmin';
-import IconPicker from './components/IconPicker'; // ⬅️ ajuste o path se necessário
+import IconPicker from './components/IconPicker';
 
 /* ========== RESOLVER DE ASSETS (sem process.env no client) ========== */
 const API_BASE_ASSETS = (getBaseUrl() || '').replace(/\/+$/, '');
@@ -19,9 +19,7 @@ function toHttps(u: string) {
       url.protocol = 'https:';
       return url.toString();
     }
-  } catch {
-    // não era absoluta
-  } 
+  } catch {}
   return u;
 }
 function resolveAssetUrl(raw?: any): string | undefined {
@@ -52,7 +50,7 @@ type AreaForm = {
   capacityAfternoon: number | null;
   capacityNight: number | null;
   isActive: boolean;
-  photoFile?: File | null; // upload
+  photoFile?: File | null;
   iconEmoji?: string | null;
   description?: string | null;
 };
@@ -417,7 +415,7 @@ function AreaModal({
 
   async function uploadPhoto(areaId: string, file: File) {
     const fd = new FormData();
-    fd.append('file', file); // field esperado pelo multer do mane-api
+    fd.append('file', file);
 
     const res = await fetch(`${API_BASE}/v1/areas/${areaId}/photo?__ts=${Date.now()}`, {
       method: 'POST',
@@ -429,7 +427,7 @@ function AreaModal({
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(payload?.message || 'Falha no upload da foto');
-    return payload; // área atualizada
+    return payload;
   }
 
   async function handleSave() {
@@ -463,7 +461,7 @@ function AreaModal({
       }
 
       toast.success(form.id ? 'Área atualizada.' : 'Área criada.');
-      onSaved();    // refresh imediato
+      onSaved();
       onClose();
     } catch (e: any) {
       console.error(e);
@@ -523,7 +521,6 @@ function AreaModal({
               />
             </label>
 
-            {/* Ícone da área */}
             <div className="md:col-span-2">
               <IconPicker
                 label="Ícone da área"
@@ -536,7 +533,6 @@ function AreaModal({
               </p>
             </div>
 
-            {/* Descrição */}
             <label className="md:col-span-2">
               <span>Descrição</span>
               <textarea
@@ -647,6 +643,7 @@ function AreaModal({
 
 /* ---------- Página ---------- */
 export default function AreasPage() {
+  // estado dos filtros "brutos" (controlados pela UI)
   const [filters, setFilters] = React.useState<AreaFilters>({
     page: 1,
     pageSize: 10,
@@ -654,6 +651,25 @@ export default function AreasPage() {
     search: '',
     active: '',
   });
+
+  // debounce da busca (300ms)
+  const [searchDebounced, setSearchDebounced] = React.useState('');
+  React.useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(filters.search || ''), 300);
+    return () => clearTimeout(t);
+  }, [filters.search]);
+
+  // compacta/normaliza filtros p/ hook/API: q, unitId definido e active somente quando booleano
+  const derived = React.useMemo(() => {
+    return {
+      ...filters,
+      // API costuma esperar 'q' como alias de busca
+      q: searchDebounced || undefined,
+      search: searchDebounced || '',
+      unitId: filters.unitId || undefined,
+      active: filters.active === '' ? undefined : filters.active,
+    } as AreaFilters & { q?: string };
+  }, [filters, searchDebounced]);
 
   const [refreshTick, setRefreshTick] = React.useState(0);
   const bump = React.useCallback(() => setRefreshTick((t) => t + 1), []);
@@ -667,9 +683,10 @@ export default function AreasPage() {
 
   const { units, loading: loadingUnits } = useUnits(true);
 
+  // injeta _rt e set para paginação
   const tableFilters = React.useMemo(
-    () => ({ ...filters, _rt: refreshTick, set: setFilters } as AreaFilters & { _rt: number; set: any }),
-    [filters, refreshTick]
+    () => ({ ...derived, _rt: refreshTick, set: setFilters } as AreaFilters & { _rt: number; set: any }),
+    [derived, refreshTick]
   );
 
   const handleToggle = async (areaId: string, next: boolean) => {
