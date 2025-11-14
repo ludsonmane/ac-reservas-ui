@@ -8,9 +8,10 @@ export type ReservationsFilters = {
   pageSize?: number;
   search?: string;
   unitId?: string;
+  unitSlug?: string;   // slug da unidade (ex.: 'aguas-claras', 'brasilia')
   areaId?: string;
-  from?: string; // ISO
-  to?: string;   // ISO
+  from?: string;       // ISO (datetime-local)
+  to?: string;         // ISO (datetime-local)
 };
 
 export type ReservationItem = any;
@@ -22,7 +23,8 @@ export type ReservationsPage = {
   totalPages: number;
 };
 
-function buildQuery(filters: ReservationsFilters & { unit?: string; unitSlug?: string }) {
+/** Monta a query aceitando as variações que o backend entende. */
+function buildQuery(filters: ReservationsFilters & { unit?: string }) {
   const p = new URLSearchParams();
 
   p.set('page', String(filters.page ?? 1));
@@ -30,32 +32,36 @@ function buildQuery(filters: ReservationsFilters & { unit?: string; unitSlug?: s
 
   const q = (filters.search || '').trim();
   if (q) {
-    p.set('q', q);
-    p.set('search', q);
+    p.set('q', q);          // alias comum
+    p.set('search', q);     // compat
   }
 
-  // ✅ unitId vai em unitId/unit_id (NÃO em 'unit')
+  // ✅ Filtra por unidade (ID)
   if (filters.unitId) {
     p.set('unitId', String(filters.unitId));
-    p.set('unit_id', String(filters.unitId));
+    p.set('unit_id', String(filters.unitId)); // compat
   }
 
-  // ✅ se vier unit (nome) ou slug, aí sim mandamos 'unit' / 'unitSlug'
+  // ✅ Filtra por unidade (slug)
+  if (filters.unitSlug) {
+    p.set('unitSlug', String(filters.unitSlug));
+    p.set('unit_slug', String(filters.unitSlug)); // compat
+  }
+
+  // (opcional) se alguém ainda mandar 'unit' (nome), passamos também
   if ((filters as any).unit) {
     p.set('unit', String((filters as any).unit));
   }
-  if ((filters as any).unitSlug) {
-    p.set('unitSlug', String((filters as any).unitSlug));
-    p.set('unit_slug', String((filters as any).unitSlug));
-  }
 
+  // ✅ Área
   if (filters.areaId) {
     p.set('areaId', String(filters.areaId));
-    p.set('area_id', String(filters.areaId));
+    p.set('area_id', String(filters.areaId)); // compat
   }
 
+  // ✅ Intervalo de datas
   if (filters.from) p.set('from', String(filters.from));
-  if (filters.to) p.set('to', String(filters.to));
+  if (filters.to)   p.set('to',   String(filters.to));
 
   return p.toString();
 }
@@ -71,12 +77,14 @@ function normalizePage(res: any, pageSizeFallback: number): ReservationsPage {
 }
 
 export function useReservations(filters: ReservationsFilters) {
+  // 🔑 inclui unitSlug no cache key para não "reaproveitar" página errada
   const key = React.useMemo(() => {
     const k = {
       p: filters.page ?? 1,
       s: filters.pageSize ?? 10,
       q: filters.search || '',
-      u: filters.unitId || '',
+      uid: filters.unitId || '',
+      us: filters.unitSlug || '',
       a: filters.areaId || '',
       f: filters.from || '',
       t: filters.to || '',
@@ -87,6 +95,7 @@ export function useReservations(filters: ReservationsFilters) {
     filters.pageSize,
     filters.search,
     filters.unitId,
+    filters.unitSlug,
     filters.areaId,
     filters.from,
     filters.to,

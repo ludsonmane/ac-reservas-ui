@@ -695,27 +695,25 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
             className="input"
             value={value.unitId || ''}
             onChange={(e) => {
-              const sel = e.target;
-              const newUnitId = sel.value || '';
-              const unitName = newUnitId ? sel.options[sel.selectedIndex].text : '';
-              // pixel continua
-              const selected = (units as any[]).find(u => (u && typeof u === 'object' ? u.id : '') === newUnitId);
+              const opt = e.target.options[e.target.selectedIndex];
+              const newUnitId = e.target.value || '';
+              const unitName = newUnitId ? opt.text : '';
+              const unitSlug = newUnitId ? (opt.getAttribute('data-slug') || '') : '';
+
+              // pixel (mantém)
+              const selected = (units as any[]).find(u => (u?.id ?? '') === newUnitId);
               if (selected) setActiveUnitPixelFromUnit(selected);
 
-              // ✅ agora gravamos unitId (ID) e unit (NOME)
-              onChange({
-                ...value,
-                unitId: newUnitId,
-                unit: unitName,   // <— novo
-                areaId: '',
-                page: 1,
-              });
+              // 🔑 guarda ID + SLUG (evita depender do nome)
+              onChange({ ...value, unitId: newUnitId, unitSlug, areaId: '', page: 1 });
             }}
             disabled={loadingUnits}
           >
             <option value="">{loadingUnits ? 'Carregando…' : 'Todas'}</option>
             {(units as any[]).map((u) => (
-              <option key={unitIdOf(u)} value={unitIdOf(u)}>{unitNameOf(u)}</option>
+              <option key={u.id} value={u.id} data-slug={u.slug || ''}>
+                {u.name}
+              </option>
             ))}
           </select>
         </label>
@@ -988,11 +986,10 @@ function ReservationModal({
 function ReservationsPanel() {
   const [filters, setFilters] = useState<any>({
     page: 1, pageSize: 10, showModal: false, editing: null,
-    unitId: '',        // 👈 usamos só ID para filtrar com precisão
+    unitId: '', unitSlug: '',   // 👈 aqui
     areaId: '',
     search: '',
-    from: '',
-    to: '',
+    from: '', to: '',
   });
 
   const [consultOpen, setConsultOpen] = useState(false);
@@ -1014,19 +1011,10 @@ function ReservationsPanel() {
     const only = {
       page: filters.page,
       pageSize: filters.pageSize,
-
-      // unidade: envie os dois para máxima compat
       unitId: filters.unitId || undefined,
-      unit: filters.unitId || undefined,   // <- alias legacy: algumas APIs filtram por "unit"
-
-      // área
+      unitSlug: filters.unitSlug || undefined,   // 👈 novo
       areaId: filters.areaId || undefined,
-
-      // busca: envie q e search
       q: (searchDebounced || undefined) as string | undefined,
-      search: (searchDebounced || undefined) as string | undefined,
-
-      // intervalo
       from: localToISOStart(filters.from),
       to: localToISOEnd(filters.to),
     };
