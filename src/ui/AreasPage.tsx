@@ -10,6 +10,41 @@ import Toggle from './Toggle';
 import { useAreasAdmin, type AreaFilters } from './hooks/useAreasAdmin';
 import IconPicker from './components/IconPicker'; // ⬅️ ajuste o path se necessário
 
+/* ========== RESOLVER DE ASSETS (sem process.env no client) ========== */
+const API_BASE_ASSETS = (getBaseUrl() || '').replace(/\/+$/, '');
+function toHttps(u: string) {
+  try {
+    const url = new URL(u);
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.protocol === 'http:') {
+      url.protocol = 'https:';
+      return url.toString();
+    }
+  } catch {
+    // não era absoluta
+  } 
+  return u;
+}
+function resolveAssetUrl(raw?: any): string | undefined {
+  const s0 =
+    raw == null
+      ? ''
+      : typeof raw === 'object' && 'url' in (raw as any)
+      ? String((raw as any).url ?? '')
+      : String(raw);
+  let s = s0.trim();
+  if (!s || s === 'null' || s === 'undefined' || s === '[object Object]') return undefined;
+
+  s = s.replace(/\\/g, '/');
+
+  if (s.startsWith('//')) return `https:${s}`;
+  if (/^https?:\/\//i.test(s) || s.startsWith('data:')) return toHttps(s);
+
+  if (!API_BASE_ASSETS) return s.startsWith('/') ? s : `/${s}`;
+  if (!s.startsWith('/')) s = '/' + s;
+  return toHttps(`${API_BASE_ASSETS}${s}`);
+}
+/* ========================================================== */
+
 type AreaForm = {
   id?: string;
   unitId: string | null;
@@ -17,13 +52,12 @@ type AreaForm = {
   capacityAfternoon: number | null;
   capacityNight: number | null;
   isActive: boolean;
-  photoFile?: File | null; // só para upload
-  // NOVOS CAMPOS:
+  photoFile?: File | null; // upload
   iconEmoji?: string | null;
   description?: string | null;
 };
 
-/* ---------- ConfirmDialog (bonitão) ---------- */
+/* ---------- ConfirmDialog ---------- */
 function ConfirmDialog({
   open,
   title = 'Confirmar ação',
@@ -56,8 +90,7 @@ function ConfirmDialog({
   }
 
   const confirmBtnClass =
-    variant === 'danger' ? 'btn btn-danger' :
-      variant === 'primary' ? 'btn btn-primary' : 'btn';
+    variant === 'danger' ? 'btn btn-danger' : variant === 'primary' ? 'btn btn-primary' : 'btn';
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
@@ -224,9 +257,26 @@ function AreasTable({
             <tbody>
               {page.items.map((a) => {
                 const unidade = a.unitName ?? unitNameById[a.unitId] ?? '-';
+                const thumb = resolveAssetUrl(a.photoUrl) || undefined;
                 return (
                   <tr key={a.id}>
-                    <td className="font-medium">{a.name}</td>
+                    <td className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {thumb ? (
+                          <img
+                            src={thumb}
+                            alt={a.name}
+                            referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
+                            className="h-9 w-12 rounded object-cover border border-border"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="h-9 w-12 rounded bg-muted border border-border" />
+                        )}
+                        <span>{a.name}</span>
+                      </div>
+                    </td>
                     <td className="p-2 text-xl">{a.iconEmoji ?? '—'}</td>
                     <td className="p-2 max-w-[360px]">
                       <span className="line-clamp-2 text-sm text-muted-foreground">
@@ -395,7 +445,6 @@ function AreaModal({
         capacityAfternoon: asNumOrNull(form.capacityAfternoon),
         capacityNight: asNumOrNull(form.capacityNight),
         isActive: !!form.isActive,
-        // NOVOS CAMPOS:
         iconEmoji: (form.iconEmoji ?? '') ? String(form.iconEmoji) : null,
         description: (form.description ?? '').trim() || null,
       };
@@ -414,7 +463,7 @@ function AreaModal({
       }
 
       toast.success(form.id ? 'Área atualizada.' : 'Área criada.');
-      onSaved();    // 🔁 dispara o refresh imediato
+      onSaved();    // refresh imediato
       onClose();
     } catch (e: any) {
       console.error(e);
@@ -425,6 +474,18 @@ function AreaModal({
   }
 
   if (!open) return null;
+
+  const currentPhoto =
+    editing && !form.photoFile
+      ? resolveAssetUrl(
+          editing.photoUrl ??
+          editing.photo ??
+          editing.imageUrl ??
+          editing.image ??
+          editing.coverUrl ??
+          editing.photo_url
+        )
+      : undefined;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
@@ -475,7 +536,7 @@ function AreaModal({
               </p>
             </div>
 
-            {/* Descrição da área */}
+            {/* Descrição */}
             <label className="md:col-span-2">
               <span>Descrição</span>
               <textarea
@@ -541,13 +602,16 @@ function AreaModal({
               </p>
             </label>
 
-            {editing?.photoUrl && !form.photoFile && (
+            {currentPhoto && (
               <div className="md:col-span-2">
                 <span className="text-xs text-muted">Foto atual:</span>
                 <img
-                  src={editing.photoUrl}
-                  alt={editing.name}
+                  src={currentPhoto}
+                  alt={editing?.name || 'Foto atual'}
                   className="mt-2 h-24 w-auto rounded border border-border object-cover"
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
               </div>
             )}
@@ -591,21 +655,18 @@ export default function AreasPage() {
     active: '',
   });
 
-  // 🔁 tick de atualização para forçar revalidação do hook de listagem
   const [refreshTick, setRefreshTick] = React.useState(0);
   const bump = React.useCallback(() => setRefreshTick((t) => t + 1), []);
 
   const [showModal, setShowModal] = React.useState(false);
   const [editing, setEditing] = React.useState<any | null>(null);
 
-  // estado do diálogo de exclusão
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<any | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
   const { units, loading: loadingUnits } = useUnits(true);
 
-  // injeta _rt para o hook perceber mudança SEMPRE que algo for salvo/alterado
   const tableFilters = React.useMemo(
     () => ({ ...filters, _rt: refreshTick, set: setFilters } as AreaFilters & { _rt: number; set: any }),
     [filters, refreshTick]
@@ -619,20 +680,18 @@ export default function AreasPage() {
         auth: true,
       });
       toast.success(next ? 'Área ativada.' : 'Área desativada.');
-      bump(); // 🔁 força refresh imediato
+      bump();
     } catch (e: any) {
       console.error(e);
       toast.error('Erro ao alterar status da área.');
     }
   };
 
-  // abre modal bonito para excluir
   const askDelete = (area: any) => {
     setDeleteTarget(area);
     setDeleteOpen(true);
   };
 
-  // confirma exclusão
   const confirmDelete = async () => {
     if (!deleteTarget || deleting) return;
     try {
@@ -641,7 +700,7 @@ export default function AreasPage() {
       toast.success('Área excluída.');
       setDeleteOpen(false);
       setDeleteTarget(null);
-      bump(); // 🔁 força refresh imediato
+      bump();
     } catch (e: any) {
       console.error(e);
       toast.error(e?.userMessage || e?.message || 'Erro ao excluir a área.');
@@ -674,12 +733,11 @@ export default function AreasPage() {
         open={showModal}
         onClose={() => setShowModal(false)}
         editing={editing}
-        onSaved={() => bump()}  // 🔁 refresh assim que salvar/criar
+        onSaved={() => bump()}
         units={units}
         loadingUnits={loadingUnits}
       />
 
-      {/* Dialogo de exclusão bonito */}
       <ConfirmDialog
         open={deleteOpen}
         title="Excluir área"
