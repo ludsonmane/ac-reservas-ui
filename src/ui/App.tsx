@@ -695,24 +695,25 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
             className="input"
             value={value.unitId || ''}
             onChange={(e) => {
-              const opt = e.target.options[e.target.selectedIndex];
               const newUnitId = e.target.value || '';
-              const unitName = newUnitId ? opt.text : '';
-              const unitSlug = newUnitId ? (opt.getAttribute('data-slug') || '') : '';
+              const selected =
+                (units as any[]).find(u => (u && typeof u === 'object' ? u.id : '') === newUnitId);
 
-              // pixel (mantém)
-              const selected = (units as any[]).find(u => (u?.id ?? '') === newUnitId);
+              // pega o slug da unidade (cubra as variações possíveis do hook)
+              const unitSlug =
+                (selected && (selected.slug || selected.unitSlug || selected.code || selected.meta?.slug)) || '';
+
               if (selected) setActiveUnitPixelFromUnit(selected);
 
-              // 🔑 guarda ID + SLUG (evita depender do nome)
+              // ⚠️ zera área ao trocar unidade e passa unitSlug
               onChange({ ...value, unitId: newUnitId, unitSlug, areaId: '', page: 1 });
             }}
             disabled={loadingUnits}
           >
             <option value="">{loadingUnits ? 'Carregando…' : 'Todas'}</option>
             {(units as any[]).map((u) => (
-              <option key={u.id} value={u.id} data-slug={u.slug || ''}>
-                {u.name}
+              <option key={(u && typeof u === 'object' ? u.id : '')} value={(u && typeof u === 'object' ? u.id : '')}>
+                {(u && typeof u === 'object' ? u.name : String(u ?? ''))}
               </option>
             ))}
           </select>
@@ -986,12 +987,13 @@ function ReservationModal({
 function ReservationsPanel() {
   const [filters, setFilters] = useState<any>({
     page: 1, pageSize: 10, showModal: false, editing: null,
-    unitId: '', unitSlug: '',   // 👈 aqui
+    unitId: '',
+    unitSlug: '',   // 👈 ADD
     areaId: '',
     search: '',
-    from: '', to: '',
+    from: '',
+    to: '',
   });
-
   const [consultOpen, setConsultOpen] = useState(false);
   const [consultCode, setConsultCode] = useState<string | null>(null);
 
@@ -1012,7 +1014,7 @@ function ReservationsPanel() {
       page: filters.page,
       pageSize: filters.pageSize,
       unitId: filters.unitId || undefined,
-      unitSlug: filters.unitSlug || undefined,   // 👈 novo
+      unitSlug: filters.unitSlug || undefined,   // 👈 ADD
       areaId: filters.areaId || undefined,
       q: (searchDebounced || undefined) as string | undefined,
       from: localToISOStart(filters.from),
