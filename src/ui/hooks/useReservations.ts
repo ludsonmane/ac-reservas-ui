@@ -22,34 +22,38 @@ export type ReservationsPage = {
   totalPages: number;
 };
 
-function buildQuery(filters: ReservationsFilters) {
+function buildQuery(filters: ReservationsFilters & { unit?: string; unitSlug?: string }) {
   const p = new URLSearchParams();
 
-  // paginação
   p.set('page', String(filters.page ?? 1));
   p.set('pageSize', String(filters.pageSize ?? 10));
 
-  // texto: manda q e search
   const q = (filters.search || '').trim();
   if (q) {
     p.set('q', q);
     p.set('search', q);
   }
 
-  // unidade: manda todos os aliases para garantir compat no backend
+  // ✅ unitId vai em unitId/unit_id (NÃO em 'unit')
   if (filters.unitId) {
-    p.set('unitId', String(filters.unitId));   // camelCase
-    p.set('unit_id', String(filters.unitId));  // snake_case
-    p.set('unit', String(filters.unitId));     // alias legado (alguns endpoints aceitam)
+    p.set('unitId', String(filters.unitId));
+    p.set('unit_id', String(filters.unitId));
   }
 
-  // área: idem
+  // ✅ se vier unit (nome) ou slug, aí sim mandamos 'unit' / 'unitSlug'
+  if ((filters as any).unit) {
+    p.set('unit', String((filters as any).unit));
+  }
+  if ((filters as any).unitSlug) {
+    p.set('unitSlug', String((filters as any).unitSlug));
+    p.set('unit_slug', String((filters as any).unitSlug));
+  }
+
   if (filters.areaId) {
     p.set('areaId', String(filters.areaId));
     p.set('area_id', String(filters.areaId));
   }
 
-  // intervalo
   if (filters.from) p.set('from', String(filters.from));
   if (filters.to) p.set('to', String(filters.to));
 
