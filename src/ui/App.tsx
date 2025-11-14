@@ -1005,9 +1005,19 @@ function ReservationsPanel() {
     const only = {
       page: filters.page,
       pageSize: filters.pageSize,
+
+      // unidade: envie os dois para máxima compat
       unitId: filters.unitId || undefined,
+      unit: filters.unitId || undefined,   // <- alias legacy: algumas APIs filtram por "unit"
+
+      // área
       areaId: filters.areaId || undefined,
+
+      // busca: envie q e search
       q: (searchDebounced || undefined) as string | undefined,
+      search: (searchDebounced || undefined) as string | undefined,
+
+      // intervalo
       from: localToISOStart(filters.from),
       to: localToISOEnd(filters.to),
     };
@@ -1036,7 +1046,7 @@ function ReservationsPanel() {
         <h2 className="title text-2xl mb-3">Reservas</h2>
         <FiltersBar value={filters} onChange={setFilters} />
         <ReservationsTable
-          filters={derivedFilters}
+          filters={{ ...derivedFilters, _rt: `${filters.page}-${searchDebounced}-${filters.unitId}-${filters.areaId}-${filters.from}-${filters.to}` }}
           setFilters={setFilters}
           onConsult={(code) => { setConsultCode(code); setConsultOpen(true); }}
           onAskDelete={(r) => { setDeleteTarget(r); setDeleteOpen(true); }}
