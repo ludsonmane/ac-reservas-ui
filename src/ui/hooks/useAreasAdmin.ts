@@ -1,6 +1,6 @@
 // src/ui/hooks/useAreasAdmin.ts
 import * as React from 'react';
-import { api } from '../../lib/api';
+import { api, getBaseUrl } from '../../lib/api';
 import { useQuery } from '../../lib/query';
 
 export type AreaFilters = {
@@ -37,6 +37,43 @@ export type AreasPage = {
   totalPages: number;
 };
 
+/* ===== helpers p/ normalizar foto ===== */
+function toHttps(u: string) {
+  try {
+    const url = new URL(u);
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.protocol === 'http:') {
+      url.protocol = 'https:';
+      return url.toString();
+    }
+  } catch {
+    // não era absoluta
+  }
+  return u;
+}
+function sanitizePhoto(raw?: any): string | undefined {
+  if (raw == null) return undefined;
+  const value = typeof raw === 'object' && 'url' in (raw as any) ? String((raw as any).url ?? '') : String(raw);
+  const r = value.trim();
+  if (!r || r === 'null' || r === 'undefined' || r === '[object Object]') return undefined;
+  return r;
+}
+function resolvePhotoUrl(raw?: any): string | undefined {
+  let s = sanitizePhoto(raw);
+  if (!s) return undefined;
+
+  s = s.replace(/\\/g, '/').trim();
+
+  if (s.startsWith('//')) return `https:${s}`;
+  if (/^https?:\/\//i.test(s) || s.startsWith('data:')) return toHttps(s);
+
+  s = s.replace(/^\/+/, '/');
+  const ASSET_BASE = (getBaseUrl() || '').replace(/\/+$/, '');
+  if (!ASSET_BASE) return s.startsWith('/') ? s : `/${s}`;
+  if (s.startsWith(ASSET_BASE)) return toHttps(s);
+  return toHttps(`${ASSET_BASE}${s.startsWith('/') ? s : `/${s}`}`);
+}
+/* ===================================== */
+
 export function useAreasAdmin(filters: AreaFilters) {
   const key = React.useMemo(
     () =>
@@ -69,27 +106,37 @@ export function useAreasAdmin(filters: AreaFilters) {
       const res = await api(`/v1/areas?${params.toString()}`, { auth: true });
 
       const rawItems = res?.items ?? res?.data ?? [];
-      const items: AreaItem[] = (rawItems as any[]).map((a) => ({
-        id: String(a.id ?? a._id),
-        name: String(a.name ?? ''),
-        unitId: String(a.unitId ?? a.unit?.id ?? ''),
-        unitName: a.unitName ?? a.unit?.name ?? a.unit ?? undefined,
-        photoUrl: a.photoUrl ?? null,
-        capacityAfternoon:
-          a.capacityAfternoon !== undefined
-            ? (a.capacityAfternoon ?? null)
-            : (a.capacity_afternoon ?? null),
-        capacityNight:
-          a.capacityNight !== undefined
-            ? (a.capacityNight ?? null)
-            : (a.capacity_night ?? null),
-        isActive: !!(a.isActive ?? a.active ?? true),
-        createdAt: a.createdAt ?? a.created_at ?? undefined,
+      const items: AreaItem[] = (rawItems as any[]).map((a) => {
+        const photo =
+          a.photoUrl ??
+          a.photo ??
+          a.imageUrl ??
+          a.image ??
+          a.coverUrl ??
+          a.photo_url;
 
-        // ✅ NOVOS CAMPOS (camel + snake)
-        iconEmoji: a.iconEmoji ?? a.icon_emoji ?? null,
-        description: a.description ?? null,
-      }));
+        return {
+          id: String(a.id ?? a._id),
+          name: String(a.name ?? ''),
+          unitId: String(a.unitId ?? a.unit?.id ?? ''),
+          unitName: a.unitName ?? a.unit?.name ?? a.unit ?? undefined,
+          photoUrl: resolvePhotoUrl(photo) ?? null,
+          capacityAfternoon:
+            a.capacityAfternoon !== undefined
+              ? (a.capacityAfternoon ?? null)
+              : (a.capacity_afternoon ?? null),
+          capacityNight:
+            a.capacityNight !== undefined
+              ? (a.capacityNight ?? null)
+              : (a.capacity_night ?? null),
+          isActive: !!(a.isActive ?? a.active ?? true),
+          createdAt: a.createdAt ?? a.created_at ?? undefined,
+
+          // ✅ NOVOS CAMPOS (camel + snake)
+          iconEmoji: a.iconEmoji ?? a.icon_emoji ?? null,
+          description: a.description ?? null,
+        };
+      });
 
       const page: AreasPage = {
         items,
@@ -115,6 +162,6 @@ export function useAreasAdmin(filters: AreaFilters) {
       },
     loading,
     error,
-    refetch, 
+    refetch,
   };
 }

@@ -16,7 +16,6 @@ import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 
-
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
   const d = new Date(iso);
@@ -130,7 +129,6 @@ function Topbar() {
               className="h-10 w-auto md:h-11 block transition-transform duration-200 group-hover:scale-[1.02]"
             />
             <span className="pointer-events-none absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 [box-shadow:0_0_0_6px_rgba(34,197,94,0.08)_inset]" />
-            
           </div>
           <div className="hidden sm:block leading-tight">
             <div className="text-base font-medium">Admin Reservas</div>
@@ -253,7 +251,6 @@ function ConsultModal({
       setError(null);
       setResv(null);
       try {
-        // sempre apiUrl() para prefixar com a base correta
         let r = await fetch(apiUrl(`/v1/reservations/public/lookup?code=${encodeURIComponent(code)}`), { cache: 'no-store' });
         if (r.status === 404) r = await fetch(apiUrl(`/v1/reservations/lookup?code=${encodeURIComponent(code)}`), { cache: 'no-store' });
         if (r.status === 404) r = await fetch(apiUrl(`/v1/reservations/code/${encodeURIComponent(code)}`), { cache: 'no-store' });
@@ -349,7 +346,6 @@ function ConsultModal({
               <>
                 <a
                   className="btn"
-                  //href={`${publicBase}/consultar?code=${encodeURIComponent(resv.reservationCode)}`}
                   href={`https://reservas.mane.com.vc/consultar?code=${encodeURIComponent(resv.reservationCode)}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -453,8 +449,6 @@ function ConfirmDialog({
   );
 }
 
-/* ---------- Tabela de Reservas ---------- */
-/* ---------- Tabela de Reservas (c/ "Criada em" + badge "hoje") ---------- */
 /* ---------- Tabela de Reservas (ajustada) ---------- */
 function ReservationsTable({
   filters, setFilters, onConsult, onAskDelete,
@@ -494,7 +488,6 @@ function ReservationsTable({
         <table className="table">
           <thead>
             <tr>
-              {/* 👇 Criada em VEM PRIMEIRO */}
               <th className="px-3 py-2 whitespace-nowrap">Criada em</th>
               <th className="px-3 py-2">Code</th>
               <th className="px-3 py-2">Cliente</th>
@@ -553,7 +546,6 @@ function ReservationsTable({
 
                 const origem = (r as any).utm_source || (r as any).source || '-';
 
-                // normalização createdAt (o hook já tenta, mas garantimos aqui também)
                 const createdAt =
                   (r as any).createdAt ?? (r as any).created_at ?? (r as any).created ?? null;
 
@@ -561,7 +553,6 @@ function ReservationsTable({
 
                 return (
                   <tr key={r.id}>
-                    {/* 👇 PRIMEIRA COLUNA: Criada em */}
                     <td className="px-3 py-2 whitespace-nowrap align-top min-w-[150px]">
                       <div className="flex items-center gap-2">
                         <span>{fmtDateTime(createdAt)}</span>
@@ -593,7 +584,7 @@ function ReservationsTable({
                       )}
                     </td>
 
-                    <td className="px-3 py-2 align-top min-w-[260px]">
+                    <td className="px-3 py-2 align-top min-w=[260px]">
                       <div className="flex items-center gap-2">
                         <img
                           src={qrUrl}
@@ -644,6 +635,7 @@ function ReservationsTable({
         <button className="btn btn-sm" onClick={() => setFilters({ ...filters, page: (filters.page || 1) + 1 })}>▶</button>
       </div>
 
+      {/* Renovar QR */}
       <ConfirmDialog
         open={!!renewTarget}
         title="Gerar novo QR Code?"
@@ -705,9 +697,10 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
             onChange={(e) => {
               const newUnitId = e.target.value || '';
               const selected = (units as any[]).find(u => unitIdOf(u) === newUnitId);
-              const legacyUnitName = selected ? unitNameOf(selected) : '';
+              // pixel (se houver) continua funcionando
               if (selected) setActiveUnitPixelFromUnit(selected);
-              onChange({ ...value, unitId: newUnitId, unit: legacyUnitName, areaId: '', page: 1 });
+              // ⚠️ não gravamos 'unit' (nome), só 'unitId' — filtro preciso por ID
+              onChange({ ...value, unitId: newUnitId, areaId: '', page: 1 });
             }}
             disabled={loadingUnits}
           >
@@ -982,12 +975,11 @@ function ReservationModal({
   );
 }
 
-/* ---------- Página: Reservas (com filtros e derivados compactados) ---------- */
+/* ---------- Página: Reservas ---------- */
 function ReservationsPanel() {
   const [filters, setFilters] = useState<any>({
     page: 1, pageSize: 10, showModal: false, editing: null,
-    unit: '',
-    unitId: '',
+    unitId: '',        // 👈 usamos só ID para filtrar com precisão
     areaId: '',
     search: '',
     from: '',
@@ -1008,16 +1000,18 @@ function ReservationsPanel() {
     return () => clearTimeout(t);
   }, [filters.search]);
 
-  // filtros "derivados" (compactados + datas ISO + alias q)
+  // 🔒 Whitelist dos filtros enviados ao hook/API (evita 'unit' solta)
   const derivedFilters = useMemo(() => {
-    const clean = compact({
-      ...filters,
-      search: searchDebounced || undefined,
-      q: searchDebounced || undefined,
+    const only = {
+      page: filters.page,
+      pageSize: filters.pageSize,
+      unitId: filters.unitId || undefined,
+      areaId: filters.areaId || undefined,
+      q: (searchDebounced || undefined) as string | undefined,
       from: localToISOStart(filters.from),
       to: localToISOEnd(filters.to),
-    });
-    return clean;
+    };
+    return compact(only);
   }, [filters, searchDebounced]);
 
   async function handleConfirmDelete() {
@@ -1026,7 +1020,6 @@ function ReservationsPanel() {
       setDeleting(true);
       await api(`/v1/reservations/${deleteTarget.id}`, { method: 'DELETE', auth: true });
       toast.success('Reserva excluída.');
-      // força atualização
       setFilters({ ...filters });
       setDeleteOpen(false);
       setDeleteTarget(null);
@@ -1085,7 +1078,7 @@ function ReservationsPanel() {
   );
 }
 
-/* ---------- App (abas + check-in) ---------- */
+/* ---------- App ---------- */
 function IconBtn({
   title,
   onClick,
@@ -1310,7 +1303,6 @@ function NavTabs({
 }
 
 /* ---------- Login ---------- */
-/* ---------- Login ---------- */
 function LoginCard() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1345,7 +1337,7 @@ function LoginCard() {
   const emailTrim = email.trim();
   const passTrim = password.trim();
   const emailOk = isEmail(emailTrim);
-  const passOk = passTrim.length >= 6; // ajuste a regra mínima se quiser
+  const passOk = passTrim.length >= 6;
   const canSubmit = emailOk && passOk && !loading;
 
   async function doLogin() {
