@@ -695,12 +695,21 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
             className="input"
             value={value.unitId || ''}
             onChange={(e) => {
-              const newUnitId = e.target.value || '';
-              const selected = (units as any[]).find(u => unitIdOf(u) === newUnitId);
-              // pixel (se houver) continua funcionando
+              const sel = e.target;
+              const newUnitId = sel.value || '';
+              const unitName = newUnitId ? sel.options[sel.selectedIndex].text : '';
+              // pixel continua
+              const selected = (units as any[]).find(u => (u && typeof u === 'object' ? u.id : '') === newUnitId);
               if (selected) setActiveUnitPixelFromUnit(selected);
-              // ⚠️ não gravamos 'unit' (nome), só 'unitId' — filtro preciso por ID
-              onChange({ ...value, unitId: newUnitId, areaId: '', page: 1 });
+
+              // ✅ agora gravamos unitId (ID) e unit (NOME)
+              onChange({
+                ...value,
+                unitId: newUnitId,
+                unit: unitName,   // <— novo
+                areaId: '',
+                page: 1,
+              });
             }}
             disabled={loadingUnits}
           >
