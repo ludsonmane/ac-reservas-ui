@@ -857,6 +857,26 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
           title="Exportar a página atual para Excel (CSV)"
           onClick={() => window.dispatchEvent(new CustomEvent('reservations:export-csv'))}
         >
+          {/* Ícone de Excel (inline SVG) */}
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="mr-1 opacity-80"
+          >
+            {/* Arquivo */}
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            {/* X do Excel */}
+            <path d="M9 15l4-6" />
+            <path d="M13 15l-4-6" />
+          </svg>
           Exportar Excel
         </button>
 
