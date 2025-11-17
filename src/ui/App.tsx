@@ -681,6 +681,10 @@ function ReservationsTable({
                       )}
                     </td>
 
+
+                    {/* CPF (coluna própria) */}
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{r.cpf || '-'}</td>
+
                     {/* Cliente (nome + email / telefone • cpf) */}
                     <td className="px-3 py-2 align-top min-w-[260px]">
                       <div className="flex items-center gap-2">
@@ -699,9 +703,6 @@ function ReservationsTable({
                         </div>
                       </div>
                     </td>
-
-                    {/* CPF (coluna própria) */}
-                    <td className="px-3 py-2 align-top whitespace-nowrap">{r.cpf || '-'}</td>
 
                     {/* Reserva (data/hora) */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{when}</td>
