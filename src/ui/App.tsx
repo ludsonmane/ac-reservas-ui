@@ -583,6 +583,7 @@ function ReservationsTable({
             <tr>
               <th className="px-3 py-2 whitespace-nowrap">Criada em</th>
               <th className="px-3 py-2">Code</th>
+              <th className="px-3 py-2">CPF</th>
               <th className="px-3 py-2">Cliente</th>
               <th className="px-3 py-2">Reserva</th>
               <th className="px-3 py-2">Pessoas</th>
@@ -610,6 +611,7 @@ function ReservationsTable({
                     </div>
                   </td>
                   <td className="px-3 py-2"><Skeleton className="h-4 w-28" /></td>
+                  <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
                   <td className="px-3 py-2"><Skeleton className="h-4 w-10" /></td>
                   <td className="px-3 py-2"><Skeleton className="h-4 w-20" /></td>
                   <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
@@ -646,6 +648,7 @@ function ReservationsTable({
 
                 return (
                   <tr key={r.id}>
+                    {/* Criada em */}
                     <td className="px-3 py-2 whitespace-nowrap align-top min-w-[150px]">
                       <div className="flex items-center gap-2">
                         <span>{fmtDateTime(createdAt)}</span>
@@ -657,6 +660,7 @@ function ReservationsTable({
                       </div>
                     </td>
 
+                    {/* Code */}
                     <td className="px-3 py-2 align-top whitespace-nowrap min-w-[92px]">
                       {r.reservationCode ? (
                         <button
@@ -677,6 +681,7 @@ function ReservationsTable({
                       )}
                     </td>
 
+                    {/* Cliente (nome + email / telefone • cpf) */}
                     <td className="px-3 py-2 align-top min-w-[260px]">
                       <div className="flex items-center gap-2">
                         <img
@@ -687,26 +692,40 @@ function ReservationsTable({
                         />
                         <div className="leading-tight">
                           <div className="font-medium">{r.fullName}</div>
-
-                          {/* 👇 Quebra em 2 linhas: 1) email  2) telefone • CPF */}
                           <div className="text-muted text-xs max-w-[260px]">
                             <div className="truncate">{r.email || ''}</div>
-                            <div className="truncate">
-                              {[r.phone, r.cpf].filter(Boolean).join(' • ')}
-                            </div>
+                            <div className="truncate">{[r.phone, r.cpf].filter(Boolean).join(' • ')}</div>
                           </div>
                         </div>
                       </div>
                     </td>
 
+                    {/* CPF (coluna própria) */}
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{r.cpf || '-'}</td>
+
+                    {/* Reserva (data/hora) */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{when}</td>
-                    <td className="px-3 py-2 align-top whitespace-nowrap">{r.people}{r.kids ? ` (+${r.kids})` : ''}</td>
+
+                    {/* Pessoas */}
+                    <td className="px-3 py-2 align-top whitespace-nowrap">
+                      {r.people}{r.kids ? ` (+${r.kids})` : ''}
+                    </td>
+
+                    {/* Unidade */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{unitLabel || '-'}</td>
+
+                    {/* Área */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{(r as any).areaName || (r as any).area || '-'}</td>
+
+                    {/* Origem */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{origem}</td>
+
+                    {/* Status */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">
                       <span className={`badge ${statusClass}`}>{r.status}</span>
                     </td>
+
+                    {/* Ações */}
                     <td className="px-3 py-2 text-right align-top">
                       <div className="flex gap-2 justify-end">
                         <IconBtn title="Editar" onClick={() => setFilters({ ...filters, showModal: true, editing: r })}><PencilIcon /></IconBtn>
@@ -717,9 +736,11 @@ function ReservationsTable({
                   </tr>
                 );
               })}
+
               {data.items.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-4 text-center text-muted">Sem resultados</td>
+                  {/* +1 coluna por causa do CPF */}
+                  <td colSpan={11} className="px-3 py-4 text-center text-muted">Sem resultados</td>
                 </tr>
               )}
             </tbody>
