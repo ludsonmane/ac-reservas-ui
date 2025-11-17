@@ -103,7 +103,7 @@ function Topbar() {
   }
 
   async function doLogout() {
-    try { await api('/auth/logout', { method: 'POST', auth: true }); } catch { }
+    try { await api('/v1/auth/logout', { method: 'POST', auth: true }); } catch { }
     clearAuth();
     invalidate('*');
     toast.success('Você saiu da aplicação.');
@@ -1309,7 +1309,7 @@ export default function App() {
     if (token && !user) {
       (async () => {
         try {
-          const me = await api('/auth/me', { auth: true });
+          const me = await api('/v1/auth/me', { auth: true });
           setUser(me.user as User);
         } catch {
           clearAuth();
@@ -1501,7 +1501,7 @@ function LoginCard() {
 
     setLoading(true);
     try {
-      const data = await api('/auth/login', { method: 'POST', body: { email: emailTrim, password: passTrim } });
+      const data = await api('/v1/auth/login', { method: 'POST', body: { email: emailTrim, password: passTrim } });
       const token = pickToken(data);
       if (!token) throw new Error('Token ausente');
 
