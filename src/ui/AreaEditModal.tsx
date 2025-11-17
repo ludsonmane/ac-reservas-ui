@@ -117,7 +117,7 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
           <button className="icon-btn" onClick={onClose} aria-label="Fechar">✕</button>
         </header>
 
-        <form onSubmit={handleSave} className="modal-body grid gap-3">
+        <form onSubmit={handleSave} className="modal-body grid gap-3 overflow-y-auto max-h-[calc(100vh-12rem)] pr-2 scroll-area">
           {error && <div className="alert alert-error">{error}</div>}
 
           <div className="grid gap-1">
