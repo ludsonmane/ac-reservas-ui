@@ -687,8 +687,13 @@ function ReservationsTable({
                         />
                         <div className="leading-tight">
                           <div className="font-medium">{r.fullName}</div>
-                          <div className="text-muted text-xs whitespace-nowrap overflow-hidden text-ellipsis max-w-[260px]">
-                            {r.email || ''}{r.phone ? ' • ' + r.phone : ''}
+
+                          {/* 👇 Quebra em 2 linhas: 1) email  2) telefone • CPF */}
+                          <div className="text-muted text-xs max-w-[260px]">
+                            <div className="truncate">{r.email || ''}</div>
+                            <div className="truncate">
+                              {[r.phone, r.cpf].filter(Boolean).join(' • ')}
+                            </div>
                           </div>
                         </div>
                       </div>
