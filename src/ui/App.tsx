@@ -473,7 +473,10 @@ function ReservationsTable({
       const headers = [
         'Criada em',
         'Code',
-        'Cliente',
+        'Cliente',  // NOME
+        'Email',
+        'Telefone',
+        'CPF',
         'Reserva',
         'Pessoas',
         'Unidade',
@@ -486,17 +489,26 @@ function ReservationsTable({
         const createdAt = r.createdAt ?? r.created_at ?? r.created ?? null;
         const createdAtTxt = createdAt ? new Date(createdAt).toLocaleString() : '-';
         const whenTxt = r.reservationDate ? new Date(r.reservationDate).toLocaleString() : '-';
+
+        // mesmo cálculo usado na tabela
         const unitLabel =
           (r.unitId && (unitsById[r.unitId] ?? undefined)) || r.unitName || r.unit || '-';
         const origem = r.utm_source || r.source || '-';
-        const cliente = [r.fullName || '-', r.email || null, r.phone || null].filter(Boolean).join(' • ');
+
+        const nome = r.fullName || '-';
+        const email = r.email || '';
+        const phone = r.phone || '';
+        const cpf = r.cpf || '';
         const pessoas = String(r.kids ? `${r.people} (+${r.kids})` : r.people ?? '-');
         const area = r.areaName || r.area || '-';
 
         return [
           createdAtTxt,
           r.reservationCode || '',
-          cliente,
+          nome,
+          email,
+          phone,
+          cpf,
           whenTxt,
           pessoas,
           unitLabel,
@@ -507,6 +519,8 @@ function ReservationsTable({
       });
 
       const all = [headers, ...rows];
+
+      // CSV com ; para Excel PT-BR
       const csv = all
         .map((row) =>
           row
@@ -520,6 +534,7 @@ function ReservationsTable({
         )
         .join('\n');
 
+      // BOM para acentuação no Excel
       const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
