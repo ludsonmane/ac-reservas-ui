@@ -16,6 +16,7 @@ import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 
+
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
   const d = new Date(iso);
@@ -466,6 +467,83 @@ function ReservationsTable({
     [units]
   );
 
+  // -------- Exportar CSV (página atual) --------
+  function exportCurrentPageToCSV() {
+    try {
+      const headers = [
+        'Criada em',
+        'Code',
+        'Cliente',
+        'Reserva',
+        'Pessoas',
+        'Unidade',
+        'Área',
+        'Origem',
+        'Status',
+      ];
+
+      const rows = (data?.items || []).map((r: any) => {
+        const createdAt = r.createdAt ?? r.created_at ?? r.created ?? null;
+        const createdAtTxt = createdAt ? new Date(createdAt).toLocaleString() : '-';
+        const whenTxt = r.reservationDate ? new Date(r.reservationDate).toLocaleString() : '-';
+        const unitLabel =
+          (r.unitId && (unitsById[r.unitId] ?? undefined)) || r.unitName || r.unit || '-';
+        const origem = r.utm_source || r.source || '-';
+        const cliente = [r.fullName || '-', r.email || null, r.phone || null].filter(Boolean).join(' • ');
+        const pessoas = String(r.kids ? `${r.people} (+${r.kids})` : r.people ?? '-');
+        const area = r.areaName || r.area || '-';
+
+        return [
+          createdAtTxt,
+          r.reservationCode || '',
+          cliente,
+          whenTxt,
+          pessoas,
+          unitLabel,
+          area,
+          origem,
+          r.status || '',
+        ];
+      });
+
+      const all = [headers, ...rows];
+      const csv = all
+        .map((row) =>
+          row
+            .map((cell) => {
+              const s = String(cell ?? '');
+              const needsQuotes = /[",;\n]/.test(s);
+              const escaped = s.replace(/"/g, '""');
+              return needsQuotes ? `"${escaped}"` : escaped;
+            })
+            .join(';'),
+        )
+        .join('\n');
+
+      const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `reservas_${ts}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export CSV error', e);
+      alert('Não foi possível gerar o arquivo.');
+    }
+  }
+
+  // Ouve o evento disparado pelo botão da barra de filtros
+  React.useEffect(() => {
+    const h = () => exportCurrentPageToCSV();
+    window.addEventListener('reservations:export-csv', h);
+    return () => window.removeEventListener('reservations:export-csv', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, unitsById]);
+
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
   const [qrBust, setQrBust] = React.useState<number>(0);
 
@@ -584,7 +662,7 @@ function ReservationsTable({
                       )}
                     </td>
 
-                    <td className="px-3 py-2 align-top min-w=[260px]">
+                    <td className="px-3 py-2 align-top min-w-[260px]">
                       <div className="flex items-center gap-2">
                         <img
                           src={qrUrl}
@@ -699,13 +777,11 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
               const selected =
                 (units as any[]).find(u => (u && typeof u === 'object' ? u.id : '') === newUnitId);
 
-              // pega o slug da unidade (cubra as variações possíveis do hook)
               const unitSlug =
                 (selected && (selected.slug || selected.unitSlug || selected.code || selected.meta?.slug)) || '';
 
               if (selected) setActiveUnitPixelFromUnit(selected);
 
-              // ⚠️ zera área ao trocar unidade e passa unitSlug
               onChange({ ...value, unitId: newUnitId, unitSlug, areaId: '', page: 1 });
             }}
             disabled={loadingUnits}
@@ -759,6 +835,16 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
 
       <div className="flex gap-2">
         <button className="btn" onClick={() => onChange({ ...value })}>Atualizar</button>
+
+        {/* Botão Exportar Excel (dispara evento para ReservationsTable) */}
+        <button
+          className="btn"
+          title="Exportar a página atual para Excel (CSV)"
+          onClick={() => window.dispatchEvent(new CustomEvent('reservations:export-csv'))}
+        >
+          Exportar Excel
+        </button>
+
         <button className="btn btn-primary" onClick={() => onChange({ ...value, showModal: true, editing: null })}>
           Nova Reserva
         </button>
@@ -867,7 +953,7 @@ function ReservationModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={editing ? 'Editar reserva' : 'Nova reserva'}>
-      <div className="card shadow-none w-full max-w-3xl md:max-w-4xl max-h=[90vh] md:max-h-[85vh] p-0 overflow-hidden flex flex-col">
+      <div className="card shadow-none w-full max-w-3xl md:max-w-4xl max-h-[90vh] md:max-h-[85vh] p-0 overflow-hidden flex flex-col">
         <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between flex-none">
           <h3 className="title text-xl m-0"> {editing ? 'Editar' : 'Nova'} Reserva</h3>
           <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Fechar</button>
