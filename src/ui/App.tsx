@@ -698,7 +698,7 @@ function ReservationsTable({
                           <div className="font-medium">{r.fullName}</div>
                           <div className="text-muted text-xs max-w-[260px]">
                             <div className="truncate">{r.email || ''}</div>
-                            <div className="truncate">{[r.phone, r.cpf].filter(Boolean).join(' • ')}</div>
+                            <div className="truncate">{[r.phone]}</div>
                           </div>
                         </div>
                       </div>
