@@ -92,7 +92,7 @@ function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="card w-full max-w-md p-0 overflow-hidden">
+      <div className="card w-full max-w-md p-0 overflow-y-auto">
         <div className="px-5 py-4 border-b border-border bg-card">
           <h3 className="text-lg font-normal m-0">{title}</h3>
         </div>
@@ -487,7 +487,7 @@ function AreaModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="card shadow-none w-full max-w-xl max-h[85vh] p-0 overflow-hidden flex flex-col">
+      <div className="card shadow-none w-full max-w-xl max-h-[85vh] p-0 overflow-y-auto flex flex-col">
         <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
           <h3 className="title text-xl m-0">{form.id ? 'Editar' : 'Nova'} Área</h3>
           <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Fechar</button>
