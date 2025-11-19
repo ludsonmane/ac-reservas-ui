@@ -1,11 +1,13 @@
 import * as React from 'react';
 import IconPicker from './components/IconPicker'; // ajuste o path conforme sua estrutura
+import { imgFromArea, resolvePhotoUrl, withCacheBust } from '../lib/assets'; // << novo
 
 type Area = {
   id: string;
   name: string;
   photoUrl: string | null;
-  capacity: number | null; // Fallback local (UI)
+  photoUrlAbsolute?: string | null; // << novo: S3/CDN
+  capacity: number | null;          // Fallback local (UI)
   capacityAfternoon: number | null;
   capacityNight: number | null;
   isActive: boolean;
@@ -26,11 +28,13 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
   const [saving, setSaving] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [bust, setBust] = React.useState<number>(0); // cache-busting de imagem
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     setForm(area);
     setError(null);
+    setBust(Date.now());
   }, [area, open]);
 
   if (!open || !form) return null;
@@ -53,7 +57,7 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
       const capNight = numOrNull(form.capacityNight ?? capFallback);
 
       const res = await fetch(`${apiBase}/v1/areas/${form.id}`, {
-        method: 'PUT', // ✅ a API expõe PUT, não PATCH
+        method: 'PUT', // a API expõe PUT
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
@@ -67,10 +71,9 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
         }),
       });
 
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(payload?.error || payload?.message || 'Falha ao salvar área');
-      }
+      const payload = (await res.json().catch(() => ({}))) as Area;
+      if (!res.ok) throw new Error((payload as any)?.error || (payload as any)?.message || 'Falha ao salvar área');
+
       onSaved(payload);
       onClose();
     } catch (err: any) {
@@ -95,19 +98,37 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
         body: fd,
         credentials: 'include',
       });
-      const payload = await res.json().catch(() => ({}));
+      const payload = (await res.json().catch(() => ({}))) as Area & {
+        photoUrlAbsolute?: string | null;
+      };
       if (!res.ok) {
-        throw new Error(payload?.error || payload?.message || 'Falha no upload');
+        throw new Error((payload as any)?.error || (payload as any)?.message || 'Falha no upload');
       }
+      // atualiza form com retorno do backend (mantém compat)
+      setForm(prev => (prev ? { ...prev, ...payload } : payload));
       onSaved(payload);
       if (fileRef.current) fileRef.current.value = '';
-      setForm(payload);
+      setBust(Date.now()); // força recarregar a imagem
     } catch (err: any) {
       setError(err?.message || 'Erro no upload');
     } finally {
       setUploading(false);
     }
   }
+
+  // Resolved preview atual (prioriza absoluto → fallback relativo)
+  const currentPhotoRaw =
+    imgFromArea(form) ||
+    resolvePhotoUrl(
+      form.photoUrl ??
+      (form as any)?.photo ??
+      (form as any)?.imageUrl ??
+      (form as any)?.image ??
+      (form as any)?.coverUrl ??
+      (form as any)?.photo_url
+    ) ||
+    '';
+  const currentPhoto = withCacheBust(currentPhotoRaw || undefined, bust);
 
   return (
     <div className="modal-backdrop">
@@ -219,9 +240,17 @@ export default function AreaEditModal({ open, area, onClose, onSaved, apiBase }:
                 {uploading ? 'Enviando…' : 'Enviar'}
               </button>
             </div>
-            {form.photoUrl && (
+
+            {currentPhoto && (
               <div className="mt-2">
-                <img src={form.photoUrl} alt={form.name} className="h-24 rounded object-cover" />
+                <img
+                  src={currentPhoto}
+                  alt={form.name}
+                  className="h-24 rounded object-cover border border-border"
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
               </div>
             )}
           </div>

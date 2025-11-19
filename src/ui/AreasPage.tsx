@@ -9,39 +9,7 @@ import { PencilIcon, PowerIcon, TrashIcon } from './icons';
 import Toggle from './Toggle';
 import { useAreasAdmin, type AreaFilters } from './hooks/useAreasAdmin';
 import IconPicker from './components/IconPicker';
-
-/* ========== RESOLVER DE ASSETS (sem process.env no client) ========== */
-const API_BASE_ASSETS = (getBaseUrl() || '').replace(/\/+$/, '');
-function toHttps(u: string) {
-  try {
-    const url = new URL(u);
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.protocol === 'http:') {
-      url.protocol = 'https:';
-      return url.toString();
-    }
-  } catch {}
-  return u;
-}
-function resolveAssetUrl(raw?: any): string | undefined {
-  const s0 =
-    raw == null
-      ? ''
-      : typeof raw === 'object' && 'url' in (raw as any)
-      ? String((raw as any).url ?? '')
-      : String(raw);
-  let s = s0.trim();
-  if (!s || s === 'null' || s === 'undefined' || s === '[object Object]') return undefined;
-
-  s = s.replace(/\\/g, '/');
-
-  if (s.startsWith('//')) return `https:${s}`;
-  if (/^https?:\/\//i.test(s) || s.startsWith('data:')) return toHttps(s);
-
-  if (!API_BASE_ASSETS) return s.startsWith('/') ? s : `/${s}`;
-  if (!s.startsWith('/')) s = '/' + s;
-  return toHttps(`${API_BASE_ASSETS}${s}`);
-}
-/* ========================================================== */
+import { imgFromArea, resolvePhotoUrl } from '../lib/assets';
 
 type AreaForm = {
   id?: string;
@@ -255,7 +223,7 @@ function AreasTable({
             <tbody>
               {page.items.map((a) => {
                 const unidade = a.unitName ?? unitNameById[a.unitId] ?? '-';
-                const thumb = resolveAssetUrl(a.photoUrl) || undefined;
+                const thumb = imgFromArea(a) || undefined;
                 return (
                   <tr key={a.id}>
                     <td className="font-medium">
@@ -411,7 +379,7 @@ function AreaModal({
     if (v === '' || v === null || typeof v === 'undefined') return null;
     const n = Number(v);
     return Number.isFinite(n) ? Math.max(0, n) : null;
-  }
+    }
 
   async function uploadPhoto(areaId: string, file: File) {
     const fd = new FormData();
@@ -473,16 +441,19 @@ function AreaModal({
 
   if (!open) return null;
 
+  // Foto atual (mostra apenas quando não tem novo arquivo selecionado)
   const currentPhoto =
     editing && !form.photoFile
-      ? resolveAssetUrl(
-          editing.photoUrl ??
-          editing.photo ??
-          editing.imageUrl ??
-          editing.image ??
-          editing.coverUrl ??
-          editing.photo_url
-        )
+      ? (imgFromArea(editing) ||
+          resolvePhotoUrl(
+            editing.photoUrl ??
+            editing.photo ??
+            editing.imageUrl ??
+            editing.image ??
+            editing.coverUrl ??
+            editing.photo_url
+          ) ||
+          undefined)
       : undefined;
 
   return (
@@ -663,7 +634,6 @@ export default function AreasPage() {
   const derived = React.useMemo(() => {
     return {
       ...filters,
-      // API costuma esperar 'q' como alias de busca
       q: searchDebounced || undefined,
       search: searchDebounced || '',
       unitId: filters.unitId || undefined,

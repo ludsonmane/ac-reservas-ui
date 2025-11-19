@@ -4,9 +4,11 @@ import { getBaseUrl } from './api';
 function toHttps(u: string) {
   try {
     const url = new URL(u);
-    if (typeof window !== 'undefined'
-      && window.location.protocol === 'https:'
-      && url.protocol === 'http:') {
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      url.protocol === 'http:'
+    ) {
       url.protocol = 'https:';
       return url.toString();
     }
@@ -18,14 +20,21 @@ function toHttps(u: string) {
 
 function sanitizePhoto(raw?: any): string | undefined {
   if (raw == null) return undefined;
-  const value = typeof raw === 'object' && 'url' in (raw as any)
-    ? String((raw as any).url ?? '')
-    : String(raw);
+  const value =
+    typeof raw === 'object' && 'url' in (raw as any)
+      ? String((raw as any).url ?? '')
+      : String(raw);
   const r = value.trim();
   if (!r || r === 'null' || r === 'undefined' || r === '[object Object]') return undefined;
   return r;
 }
 
+/**
+ * Resolve uma URL de imagem:
+ * - aceita absoluta (http/https/data);
+ * - trata //cdn...;
+ * - para caminhos relativos, prefixa com a base da API (getBaseUrl).
+ */
 export function resolvePhotoUrl(raw?: any): string | undefined {
   let s = sanitizePhoto(raw);
   if (!s) return undefined;
@@ -54,4 +63,27 @@ export function resolvePhotoUrl(raw?: any): string | undefined {
   if (s.startsWith(ASSET_BASE)) return toHttps(s);
 
   return toHttps(`${ASSET_BASE}${s.startsWith('/') ? s : `/${s}`}`);
+}
+
+/**
+ * Retorna a melhor URL da área:
+ * - prioriza `photoUrlAbsolute` (S3/CDN);
+ * - fallback para `photoUrl` relativo servido pela API;
+ * - retorna '' se nada disponível.
+ */
+export function imgFromArea(area?: { photoUrl?: string | null; photoUrlAbsolute?: string | null }): string {
+  if (!area) return '';
+  const abs = resolvePhotoUrl(area.photoUrlAbsolute);
+  if (abs) return abs;
+  const rel = resolvePhotoUrl(area.photoUrl);
+  return rel ?? '';
+}
+
+/**
+ * (Opcional) adiciona cache-busting quando quiser forçar refresh de preview.
+ */
+export function withCacheBust(url?: string, seed?: string | number): string {
+  if (!url) return '';
+  const v = typeof seed !== 'undefined' ? String(seed) : String(Date.now());
+  return url.includes('?') ? `${url}&v=${v}` : `${url}?v=${v}`;
 }
