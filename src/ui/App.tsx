@@ -450,6 +450,15 @@ function ConfirmDialog({
   );
 }
 
+/* ---------- helpers de label para reservationType ---------- */
+function reservationTypeLabel(v?: string | null) {
+  const x = (v || '').toUpperCase();
+  if (x === 'CONFRATERNIZACAO') return 'Confraternização';
+  if (x === 'EMPRESA') return 'Empresa';
+  if (x === 'PARTICULAR') return 'Particular';
+  return '-';
+}
+
 /* ---------- Tabela de Reservas (ajustada) ---------- */
 function ReservationsTable({
   filters, setFilters, onConsult, onAskDelete,
@@ -473,7 +482,8 @@ function ReservationsTable({
       const headers = [
         'Criada em',
         'Code',
-        'Cliente',  // NOME
+        'Tipo',
+        'Cliente',
         'Email',
         'Telefone',
         'CPF',
@@ -490,12 +500,12 @@ function ReservationsTable({
         const createdAtTxt = createdAt ? new Date(createdAt).toLocaleString() : '-';
         const whenTxt = r.reservationDate ? new Date(r.reservationDate).toLocaleString() : '-';
 
-        // mesmo cálculo usado na tabela
         const unitLabel =
           (r.unitId && (unitsById[r.unitId] ?? undefined)) || r.unitName || r.unit || '-';
         const origem = r.utm_source || r.source || '-';
 
         const nome = r.fullName || '-';
+        const tipoLabel = reservationTypeLabel(r.reservationType);
         const email = r.email || '';
         const phone = r.phone || '';
         const cpf = r.cpf || '';
@@ -505,6 +515,7 @@ function ReservationsTable({
         return [
           createdAtTxt,
           r.reservationCode || '',
+          tipoLabel,
           nome,
           email,
           phone,
@@ -582,6 +593,7 @@ function ReservationsTable({
           <thead>
             <tr>
               <th className="px-3 py-2 whitespace-nowrap">Criada em</th>
+              <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Code</th>
               <th className="px-3 py-2">CPF</th>
               <th className="px-3 py-2">Cliente</th>
@@ -660,6 +672,11 @@ function ReservationsTable({
                       </div>
                     </td>
 
+                    {/* Tipo de Reserva (logo após Criada em) */}
+                    <td className="px-3 py-2 align-top whitespace-nowrap">
+                      {reservationTypeLabel((r as any).reservationType)}
+                    </td>
+
                     {/* Code */}
                     <td className="px-3 py-2 align-top whitespace-nowrap min-w-[92px]">
                       {r.reservationCode ? (
@@ -681,11 +698,10 @@ function ReservationsTable({
                       )}
                     </td>
 
-
                     {/* CPF (coluna própria) */}
-                    <td className="px-3 py-2 align-top whitespace-nowrap">{r.cpf || '-'}</td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">{(r as any).cpf || '-'}</td>
 
-                    {/* Cliente (nome + email / telefone • cpf) */}
+                    {/* Cliente (nome + email / telefone) */}
                     <td className="px-3 py-2 align-top min-w-[260px]">
                       <div className="flex items-center gap-2">
                         <img
@@ -695,10 +711,10 @@ function ReservationsTable({
                           alt=""
                         />
                         <div className="leading-tight">
-                          <div className="font-medium">{r.fullName}</div>
+                          <div className="font-medium">{(r as any).fullName}</div>
                           <div className="text-muted text-xs max-w-[260px]">
-                            <div className="truncate">{r.email || ''}</div>
-                            <div className="truncate">{[r.phone]}</div>
+                            <div className="truncate">{(r as any).email || ''}</div>
+                            <div className="truncate">{[(r as any).phone]}</div>
                           </div>
                         </div>
                       </div>
@@ -709,7 +725,7 @@ function ReservationsTable({
 
                     {/* Pessoas */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">
-                      {r.people}{r.kids ? ` (+${r.kids})` : ''}
+                      {r.people}{(r as any).kids ? ` (+${(r as any).kids})` : ''}
                     </td>
 
                     {/* Unidade */}
@@ -740,8 +756,7 @@ function ReservationsTable({
 
               {data.items.length === 0 && (
                 <tr>
-                  {/* +1 coluna por causa do CPF */}
-                  <td colSpan={11} className="px-3 py-4 text-center text-muted">Sem resultados</td>
+                  <td colSpan={12} className="px-3 py-4 text-center text-muted">Sem resultados</td>
                 </tr>
               )}
             </tbody>
@@ -1544,7 +1559,7 @@ function LoginCard() {
               required
               autoComplete="username"
               disabled={loading}
-              aria-invalid={email.length > 0 && !emailOk}
+              aria-invalid={email.length > 0 && !isEmail(emailTrim)}
               autoFocus
               placeholder="seuemail@exemplo.com"
             />
@@ -1560,7 +1575,7 @@ function LoginCard() {
               required
               disabled={loading}
               autoComplete="current-password"
-              aria-invalid={password.length > 0 && !passOk}
+              aria-invalid={password.length > 0 && passTrim.length < 6}
               placeholder="Sua senha"
               onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(e as any); }}
             />
