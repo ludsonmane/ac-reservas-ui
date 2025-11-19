@@ -16,7 +16,6 @@ import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 
-
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
   const d = new Date(iso);
@@ -451,12 +450,26 @@ function ConfirmDialog({
 }
 
 /* ---------- helpers de label para reservationType ---------- */
-function reservationTypeLabel(v?: string | null) {
-  const x = (v || '').toUpperCase();
-  if (x === 'CONFRATERNIZACAO') return 'Confraternização';
-  if (x === 'EMPRESA') return 'Empresa';
-  if (x === 'PARTICULAR') return 'Particular';
-  return '-';
+function reservationTypeLabel(raw?: string | null) {
+  if (!raw) return '-';
+  const x = raw
+    .toString()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toUpperCase()
+    .trim();
+
+  if (x === 'CONFRATERNIZACAO' || x === 'CONFRATERNIZACAO/GRUPO' || x === 'CONFRATERNIZACAO ') {
+    return 'Confraternização';
+  }
+  if (x === 'EMPRESA' || x === 'CORPORATIVO' || x === 'CORPORATE') {
+    return 'Empresa';
+  }
+  if (x === 'PARTICULAR' || x === 'PESSOAL' || x === 'PRIVADO') {
+    return 'Particular';
+  }
+  // fallback: capitaliza o original
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
 /* ---------- Tabela de Reservas (ajustada) ---------- */
@@ -505,7 +518,8 @@ function ReservationsTable({
         const origem = r.utm_source || r.source || '-';
 
         const nome = r.fullName || '-';
-        const tipoLabel = reservationTypeLabel(r.reservationType);
+        const rTypeRaw = r.reservationType ?? r.tipo ?? r.type ?? null;
+        const tipoLabel = reservationTypeLabel(rTypeRaw);
         const email = r.email || '';
         const phone = r.phone || '';
         const cpf = r.cpf || '';
@@ -658,6 +672,13 @@ function ReservationsTable({
 
                 const qrUrl = apiUrl(`/v1/reservations/${r.id}/qrcode?v=${qrBust}`);
 
+                // 👇 ler o tipo a partir de múltiplas chaves
+                const rTypeRaw =
+                  (r as any).reservationType ??
+                  (r as any).tipo ??
+                  (r as any).type ??
+                  null;
+
                 return (
                   <tr key={r.id}>
                     {/* Criada em */}
@@ -674,7 +695,7 @@ function ReservationsTable({
 
                     {/* Tipo de Reserva (logo após Criada em) */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">
-                      {reservationTypeLabel((r as any).reservationType)}
+                      {reservationTypeLabel(rTypeRaw)}
                     </td>
 
                     {/* Code */}
@@ -698,7 +719,7 @@ function ReservationsTable({
                       )}
                     </td>
 
-                    {/* CPF (coluna própria) */}
+                    {/* CPF */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{(r as any).cpf || '-'}</td>
 
                     {/* Cliente (nome + email / telefone) */}
@@ -899,7 +920,6 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
           title="Exportar a página atual para Excel (CSV)"
           onClick={() => window.dispatchEvent(new CustomEvent('reservations:export-csv'))}
         >
-          {/* Ícone Excel */}
           <svg
             viewBox="0 0 24 24"
             width="18"
@@ -1169,13 +1189,13 @@ function ReservationsPanel() {
     return () => clearTimeout(t);
   }, [filters.search]);
 
-  // 🔒 Whitelist dos filtros enviados ao hook/API (evita 'unit' solta)
+  // 🔒 Whitelist dos filtros enviados ao hook/API
   const derivedFilters = useMemo(() => {
     const only = {
       page: filters.page,
       pageSize: filters.pageSize,
       unitId: filters.unitId || undefined,
-      unitSlug: filters.unitSlug || undefined,   // 👈 ADD
+      unitSlug: filters.unitSlug || undefined,
       areaId: filters.areaId || undefined,
       q: (searchDebounced || undefined) as string | undefined,
       from: localToISOStart(filters.from),
