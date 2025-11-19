@@ -1,6 +1,7 @@
 export type Reservation = {
   id: string;
   reservationCode?: string | null;
+  reservationType: string;
   fullName: string;
   cpf?: string | null;
   people: number;

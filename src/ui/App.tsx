@@ -675,6 +675,7 @@ function ReservationsTable({
                 // 👇 ler o tipo a partir de múltiplas chaves
                 const rTypeRaw =
                   (r as any).reservationType ??
+                  (r as any).reservation_type ??
                   (r as any).tipo ??
                   (r as any).type ??
                   null;
