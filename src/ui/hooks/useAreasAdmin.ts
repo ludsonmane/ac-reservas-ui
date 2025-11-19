@@ -1,7 +1,8 @@
 // src/ui/hooks/useAreasAdmin.ts
 import * as React from 'react';
-import { api, getBaseUrl } from '../../lib/api';
+import { api } from '../../lib/api';
 import { useQuery } from '../../lib/query';
+import { resolvePhotoUrl } from '../../lib/assets'; // << usar helper central
 
 export type AreaFilters = {
   page?: number;
@@ -18,7 +19,10 @@ export type AreaItem = {
   name: string;
   unitId: string;
   unitName?: string;
+  /** caminho/URL legado (relativo ou absoluto, já normalizado) */
   photoUrl?: string | null;
+  /** URL absoluta preferencial (S3/CDN) */
+  photoUrlAbsolute?: string | null; // << novo
   capacityAfternoon: number | null;
   capacityNight: number | null;
   isActive: boolean;
@@ -36,43 +40,6 @@ export type AreasPage = {
   pageSize: number;
   totalPages: number;
 };
-
-/* ===== helpers p/ normalizar foto ===== */
-function toHttps(u: string) {
-  try {
-    const url = new URL(u);
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.protocol === 'http:') {
-      url.protocol = 'https:';
-      return url.toString();
-    }
-  } catch {
-    // não era absoluta
-  }
-  return u;
-}
-function sanitizePhoto(raw?: any): string | undefined {
-  if (raw == null) return undefined;
-  const value = typeof raw === 'object' && 'url' in (raw as any) ? String((raw as any).url ?? '') : String(raw);
-  const r = value.trim();
-  if (!r || r === 'null' || r === 'undefined' || r === '[object Object]') return undefined;
-  return r;
-}
-function resolvePhotoUrl(raw?: any): string | undefined {
-  let s = sanitizePhoto(raw);
-  if (!s) return undefined;
-
-  s = s.replace(/\\/g, '/').trim();
-
-  if (s.startsWith('//')) return `https:${s}`;
-  if (/^https?:\/\//i.test(s) || s.startsWith('data:')) return toHttps(s);
-
-  s = s.replace(/^\/+/, '/');
-  const ASSET_BASE = (getBaseUrl() || '').replace(/\/+$/, '');
-  if (!ASSET_BASE) return s.startsWith('/') ? s : `/${s}`;
-  if (s.startsWith(ASSET_BASE)) return toHttps(s);
-  return toHttps(`${ASSET_BASE}${s.startsWith('/') ? s : `/${s}`}`);
-}
-/* ===================================== */
 
 export function useAreasAdmin(filters: AreaFilters) {
   const key = React.useMemo(
@@ -107,7 +74,8 @@ export function useAreasAdmin(filters: AreaFilters) {
 
       const rawItems = res?.items ?? res?.data ?? [];
       const items: AreaItem[] = (rawItems as any[]).map((a) => {
-        const photo =
+        // candidatos de campo "foto relativa"
+        const photoRel =
           a.photoUrl ??
           a.photo ??
           a.imageUrl ??
@@ -115,12 +83,23 @@ export function useAreasAdmin(filters: AreaFilters) {
           a.coverUrl ??
           a.photo_url;
 
+        // campo absoluto preferencial vindo da API
+        const photoAbs =
+          a.photoUrlAbsolute ??
+          a.photo_url_absolute ??
+          undefined;
+
+        // normaliza ambos (o helper aceita absoluto/relativo)
+        const normalizedAbs = resolvePhotoUrl(photoAbs) ?? null;
+        const normalizedRel = resolvePhotoUrl(photoRel) ?? null;
+
         return {
           id: String(a.id ?? a._id),
           name: String(a.name ?? ''),
           unitId: String(a.unitId ?? a.unit?.id ?? ''),
           unitName: a.unitName ?? a.unit?.name ?? a.unit ?? undefined,
-          photoUrl: resolvePhotoUrl(photo) ?? null,
+          photoUrlAbsolute: normalizedAbs, // preferencial p/ UI
+          photoUrl: normalizedRel,         // fallback legado
           capacityAfternoon:
             a.capacityAfternoon !== undefined
               ? (a.capacityAfternoon ?? null)
