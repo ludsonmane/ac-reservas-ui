@@ -68,7 +68,7 @@ export function useUnits(enabled: boolean = true) {
       enabled,
       topics: ['units'],
       staleTime: 5 * 60 * 1000, // 5min
-      keepPreviousData: true,
+      // keepPreviousData: true, // ❌ removido: não existe em UseQueryOpts
     }
   );
 
