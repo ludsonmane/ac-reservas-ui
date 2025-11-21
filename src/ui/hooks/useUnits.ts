@@ -16,15 +16,15 @@ function normalizeSlug(s: string) {
 }
 
 function normalizeUnits(list: any[]): UnitOption[] {
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
   const out: UnitOption[] = [];
 
-  for (const u of list ?? []) {
+  for (const u of Array.isArray(list) ? list : []) {
     const id = String(u?.id ?? u?._id ?? '').trim();
-    if (!id) continue; // precisa ter id real
+    if (!id) continue; // ⚠️ só aceita ID real (nunca slug/name)
 
-    if (seen.has(id)) continue;
-    seen.add(id);
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
 
     const name = String(u?.name ?? u?.title ?? u?.slug ?? '').trim();
     const slugRaw = String(u?.slug ?? '').trim();
@@ -56,7 +56,7 @@ export function useUnits(enabled: boolean = true) {
       // 1) Tenta endpoint público leve
       try {
         const list = await api('/v1/units/public/options/list');
-        return normalizeUnits(Array.isArray(list) ? list : []);
+        return normalizeUnits(list);
       } catch {
         // 2) Fallback autenticado (puxa bastante para caber tudo)
         const page = await api('/v1/units?page=1&pageSize=1000&active=1', { auth: true });
@@ -68,7 +68,6 @@ export function useUnits(enabled: boolean = true) {
       enabled,
       topics: ['units'],
       staleTime: 5 * 60 * 1000, // 5min
-      // keepPreviousData: true, // ❌ removido: não existe em UseQueryOpts
     }
   );
 
