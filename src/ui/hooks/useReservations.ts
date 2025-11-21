@@ -8,9 +8,9 @@ export type ReservationsFilters = {
   pageSize?: number;
   search?: string;
   unitId?: string;
-  unitSlug?: string;
+  unitSlug?: string; // legado (slug) — se vier sem unitId, enviamos como "unit" p/ API
   areaId?: string;
-  from?: string; // ISO (yyyy-mm-ddThh:mm)
+  from?: string; // ISO (yyyy-mm-ddThh:mm:ssZ) ou yyyy-mm-dd
   to?: string;   // ISO
 };
 
@@ -24,44 +24,62 @@ export type ReservationsPage = {
 };
 
 /* ---------- utils ---------- */
-const hasRestrictiveFilter = (f: ReservationsFilters) =>
-  !!(f.unitId || f.unitSlug || f.areaId || (f.search && f.search.trim()) || f.from || f.to);
+const BIG_PAGE = 1000; // quando filtramos no cliente
 
-const BIG_PAGE = 1000; // quanto vamos puxar quando precisar filtrar no cliente
+const norm = (v: any) => {
+  const s = String(v ?? '').trim();
+  return s && s !== 'undefined' && s !== 'null' ? s : '';
+};
+const normMaybe = (v: any): string | undefined => {
+  const s = norm(v);
+  return s ? s : undefined;
+};
 
-function normId(v: any) {
-  const s = v == null ? '' : String(v).trim();
-  return s;
-}
 function toISO(x?: string | null) {
   if (!x) return null;
   const d = new Date(x);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
-function str(v: any) { return (v ?? '').toString().toLowerCase(); }
+
+function normalizeSlug(s: string) {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')     // separadores
+    .replace(/(^-|-$)/g, '');
+}
 
 function getUnitFields(item: any) {
-  const obj = item || {};
-  const unit = obj.unit || {};
-  return {
-    id: normId(obj.unitId ?? obj.unit_id ?? unit.id),
-    slug: normId(obj.unitSlug ?? obj.unit_slug ?? unit.slug ?? unit.code),
-    name: obj.unitName ?? obj.unit_name ?? unit.name ?? obj.unit ?? '',
-  };
+  const unitObj = item?.unit || {};
+  const id = norm(item?.unitId ?? item?.unit_id ?? unitObj?.id);
+  const slug =
+    norm(item?.unitSlug ?? item?.unit_slug ?? unitObj?.slug ?? unitObj?.code) ||
+    normalizeSlug(item?.unitName ?? item?.unit_name ?? unitObj?.name ?? item?.unit); // deriva do nome se precisar
+  const name = item?.unitName ?? item?.unit_name ?? unitObj?.name ?? item?.unit ?? '';
+  return { id, slug, name };
 }
+
+const hasRestrictiveFilter = (f: ReservationsFilters) =>
+  !!(norm(f.unitId) || norm(f.unitSlug) || norm(f.areaId) || norm(f.search) || norm(f.from) || norm(f.to));
 
 function buildQuery(filters: ReservationsFilters, effective: { page: number; pageSize: number }) {
   const p = new URLSearchParams();
   p.set('page', String(effective.page));
   p.set('pageSize', String(effective.pageSize));
 
-  const q = (filters.search || '').trim();
-  if (q) { p.set('q', q); p.set('search', q); }
+  const search = normMaybe(filters.search);
+  const unitId = normMaybe(filters.unitId);
+  const unitSlug = normMaybe(filters.unitSlug);
+  const areaId = normMaybe(filters.areaId);
 
-  if (filters.unitId) { p.set('unitId', filters.unitId); p.set('unit_id', filters.unitId); }
-  if (filters.unitSlug) { p.set('unitSlug', filters.unitSlug); p.set('unit_slug', filters.unitSlug); }
-
-  if (filters.areaId) { p.set('areaId', filters.areaId); p.set('area_id', filters.areaId); }
+  if (search) p.set('search', search);
+  if (unitId) {
+    p.set('unitId', unitId);          // preferencial
+  } else if (unitSlug) {
+    p.set('unit', unitSlug);          // legado (API entende "unit" como slug/nome)
+  }
+  if (areaId) p.set('areaId', areaId);
 
   if (filters.from) p.set('from', filters.from);
   if (filters.to) p.set('to', filters.to);
@@ -81,10 +99,10 @@ function normalizePage(res: any, fallbackSize: number): ReservationsPage {
 
 /* ---------- filtro local (failsafe + precisão) ---------- */
 function clientFilter(items: any[], f: ReservationsFilters) {
-  const wantId = normId(f.unitId);
-  const wantSlug = normId(f.unitSlug);
-  const wantArea = normId(f.areaId);
-  const q = (f.search || '').trim().toLowerCase();
+  const wantId = norm(f.unitId);
+  const wantSlug = norm(f.unitSlug);
+  const wantArea = norm(f.areaId);
+  const q = norm(f.search).toLowerCase();
 
   const fromISO = toISO(f.from);
   const toISOVal = toISO(f.to);
@@ -93,19 +111,20 @@ function clientFilter(items: any[], f: ReservationsFilters) {
     // unidade
     if (wantId || wantSlug) {
       const u = getUnitFields(it);
-      if (wantId && normId(u.id) !== wantId) return false;
-      if (wantSlug && normId(u.slug) !== wantSlug) return false;
+      if (wantId && norm(u.id) !== wantId) return false;
+      if (wantSlug && normalizeSlug(u.slug || u.name) !== normalizeSlug(wantSlug)) return false;
     }
 
     // área
     if (wantArea) {
-      const aId = normId(it.areaId ?? it.area_id ?? it.area?.id);
+      const aId = norm(it.areaId ?? it.area_id ?? it.area?.id);
       if (aId !== wantArea) return false;
     }
 
     // período
     if (fromISO || toISOVal) {
-      const resvISO = toISO(it.reservationDate ?? it.date ?? it.when);
+      const raw = it.reservationDate ?? it.date ?? it.when;
+      const resvISO = toISO(raw);
       if (!resvISO) return false;
       if (fromISO && resvISO < fromISO) return false;
       if (toISOVal && resvISO > toISOVal) return false;
@@ -119,31 +138,39 @@ function clientFilter(items: any[], f: ReservationsFilters) {
         it.reservationCode, it.code,
         getUnitFields(it).name,
         it.areaName ?? it.area?.name,
-      ].map(str).join(' ');
+      ]
+        .map((x) => String(x ?? '').toLowerCase())
+        .join(' ');
       if (!hay.includes(q)) return false;
     }
+
     return true;
   });
 }
 
 /* ---------- hook ---------- */
 export function useReservations(filters: ReservationsFilters) {
+  // chave robusta: muda quando QUALQUER filtro relevante muda
   const key = React.useMemo(() => {
-    const k = {
-      p: filters.page ?? 1,
-      s: filters.pageSize ?? 10,
-      q: filters.search || '',
-      uid: filters.unitId || '',
-      us: filters.unitSlug || '',
-      aid: filters.areaId || '',
-      f: filters.from || '',
-      t: filters.to || '',
-    };
-    return `reservations:${JSON.stringify(k)}`;
-  }, [filters.page, filters.pageSize, filters.search, filters.unitId, filters.unitSlug, filters.areaId, filters.from, filters.to]);
+    return [
+      'reservations',
+      filters.page ?? 1,
+      filters.pageSize ?? 10,
+      norm(filters.search),
+      norm(filters.unitId),
+      norm(filters.unitSlug),
+      norm(filters.areaId),
+      norm(filters.from),
+      norm(filters.to),
+    ].join('|');
+  }, [
+    filters.page, filters.pageSize, filters.search,
+    filters.unitId, filters.unitSlug, filters.areaId,
+    filters.from, filters.to,
+  ]);
 
   const needClientFilter = hasRestrictiveFilter(filters);
-  // quando tem filtro restritivo, pedimos sempre page 1 e pageSize grande
+  // quando tem filtro restritivo, pedimos sempre page 1 e pageSize grande (server)
   const effective = {
     page: needClientFilter ? 1 : (filters.page ?? 1),
     pageSize: needClientFilter ? BIG_PAGE : (filters.pageSize ?? 10),
@@ -157,7 +184,7 @@ export function useReservations(filters: ReservationsFilters) {
       const page = normalizePage(res, effective.pageSize);
 
       // aplica filtro local quando necessário
-      const sourceItems = needClientFilter ? page.items : page.items;
+      const sourceItems = page.items;
       const filtered = needClientFilter ? clientFilter(sourceItems, filters) : sourceItems;
 
       // paginação no cliente quando filtramos localmente
