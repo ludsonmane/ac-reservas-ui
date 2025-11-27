@@ -493,52 +493,60 @@ function ReservationsTable({
   function exportCurrentPageToCSV() {
     try {
       const headers = [
-        'Criada em',
-        'Code',
-        'Tipo',
-        'Cliente',
-        'Email',
-        'Telefone',
-        'CPF',
-        'Reserva',
-        'Pessoas',
-        'Unidade',
-        'Área',
-        'Origem',
-        'Status',
+        'NOME',
+        'CELULAR',
+        'SOLICITAÇÃO (DATA)',
+        'CANAL',
+        'TIPO DE RESERVA',
+        'DATA DA RESERVA',
+        'QUANTIDADE',
+        'HORARIO',
+        'STATUS',
       ];
 
       const rows = (data?.items || []).map((r: any) => {
         const createdAt = r.createdAt ?? r.created_at ?? r.created ?? null;
-        const createdAtTxt = createdAt ? new Date(createdAt).toLocaleString() : '-';
-        const whenTxt = r.reservationDate ? new Date(r.reservationDate).toLocaleString() : '-';
+        const createdDateTxt = createdAt
+          ? new Date(createdAt).toLocaleDateString('pt-BR')
+          : '-';
+
+        const dRes = r.reservationDate ? new Date(r.reservationDate) : null;
+        const dataReservaTxt = dRes
+          ? dRes.toLocaleDateString('pt-BR')
+          : '-';
+        const horarioTxt = dRes
+          ? dRes.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          : '-';
 
         const unitLabel =
           (r.unitId && (unitsById[r.unitId] ?? undefined)) || r.unitName || r.unit || '-';
         const origem = r.utm_source || r.source || '-';
 
         const nome = r.fullName || '-';
+        const phone = r.phone || '';
+        const pessoas = String(r.kids ? `${r.people} (+${r.kids})` : r.people ?? '-');
+
         const rTypeRaw = r.reservationType ?? r.tipo ?? r.type ?? null;
         const tipoLabel = reservationTypeLabel(rTypeRaw);
-        const email = r.email || '';
-        const phone = r.phone || '';
-        const cpf = r.cpf || '';
-        const pessoas = String(r.kids ? `${r.people} (+${r.kids})` : r.people ?? '-');
-        const area = r.areaName || r.area || '-';
 
         return [
-          createdAtTxt,
-          r.reservationCode || '',
-          tipoLabel,
+          // NOME
           nome,
-          email,
+          // CELULAR
           phone,
-          cpf,
-          whenTxt,
-          pessoas,
-          unitLabel,
-          area,
+          // SOLICITAÇÃO (DATA)
+          createdDateTxt,
+          // CANAL
           origem,
+          // TIPO DE RESERVA
+          tipoLabel,
+          // DATA DA RESERVA
+          dataReservaTxt,
+          // QUANTIDADE
+          pessoas,
+          // HORARIO
+          horarioTxt,
+          // STATUS
           r.status || '',
         ];
       });
@@ -562,8 +570,8 @@ function ReservationsTable({
       // BOM para acentuação no Excel
       const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
       const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const a = document.createElement('a');
       a.href = url;
       a.download = `reservas_${ts}.csv`;
       document.body.appendChild(a);
