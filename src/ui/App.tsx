@@ -1176,7 +1176,7 @@ function ReservationModal({
 /* ---------- Página: Reservas ---------- */
 function ReservationsPanel() {
   const [filters, setFilters] = useState<any>({
-    page: 1, pageSize: 10, showModal: false, editing: null,
+    page: 1, pageSize: 25, showModal: false, editing: null,
     unitId: '',
     unitSlug: '',   // 👈 ADD
     areaId: '',
