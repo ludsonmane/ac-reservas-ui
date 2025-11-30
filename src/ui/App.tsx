@@ -16,6 +16,21 @@ import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 
+/* ---------- tipos ---------- */
+type ReservationBlockDTO = {
+  id: string;
+  unitId: string;
+  areaId: string | null;
+  date: string; // ISO
+  mode: 'PERIOD' | 'SLOTS';
+  period: 'AFTERNOON' | 'NIGHT' | 'ALL_DAY' | null;
+  slots: string[] | null;
+  reason: string | null;
+  createdBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
   const d = new Date(iso);
@@ -472,82 +487,110 @@ function reservationTypeLabel(raw?: string | null) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
-/* ---------- Painel: Bloquear Reservas ---------- */
-function BlockReservationsPanel() {
-  const [form, setForm] = useState<{
+/* ---------- Modal de Bloqueio de Reservas ---------- */
+function BlockModal({
+  open,
+  onClose,
+  editing,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editing: ReservationBlockDTO | null;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<{
     unitId: string;
-    date: string;
+    areaId: string | '';
+    date: string;  // YYYY-MM-DD
     period: 'ALL_DAY' | 'AFTERNOON' | 'NIGHT';
-    scope: 'ALL' | 'AREA';
-    areaId: string;
     reason: string;
   }>({
     unitId: '',
+    areaId: '',
     date: '',
     period: 'ALL_DAY',
-    scope: 'ALL',
-    areaId: '',
     reason: '',
   });
+  const [saving, setSaving] = React.useState(false);
 
-  const [saving, setSaving] = useState(false);
+  const { units, loading: loadingUnits } = useUnits(open);
+  const areasByUnit = useAreasByUnit(form.unitId || undefined, open && !!form.unitId);
 
-  const { units, loading: loadingUnits } = useUnits(true);
-  const areasByUnit = useAreasByUnit(form.unitId || undefined, !!form.unitId);
+  const pad = (n: number) => String(n).padStart(2, '0');
 
-  function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
+  React.useEffect(() => {
+    if (!open) return;
 
-  const canSubmit =
-    !!form.unitId &&
-    !!form.date &&
-    !!form.period &&
-    (form.scope === 'ALL' || !!form.areaId);
+    if (editing) {
+      const d = new Date(editing.date);
+      const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit || saving) return;
-
-    try {
-      setSaving(true);
-
-      // monta data em ISO (inicio do dia)
-      const d = new Date(`${form.date}T00:00:00`);
-      if (Number.isNaN(d.getTime())) {
-        toast.error('Data inválida.');
-        setSaving(false);
-        return;
-      }
-
-      const payload: any = {
-        unitId: form.unitId,
-        // se for "todas as áreas", manda null
-        areaId: form.scope === 'ALL' ? null : form.areaId || null,
-        date: d.toISOString(),
-        mode: 'PERIOD',           // usamos sempre PERIOD
-        period: form.period,      // 'ALL_DAY' | 'AFTERNOON' | 'NIGHT'
-        slots: null,
-        reason: form.reason || 'Bloqueio criado pelo admin.',
-      };
-
-      await api('/v1/admin/blocks', {
-        method: 'POST',
-        body: payload,
-        auth: true,
+      setForm({
+        unitId: editing.unitId,
+        areaId: editing.areaId || '',
+        date: dateStr,
+        period: (editing.period as any) || 'ALL_DAY',
+        reason: editing.reason || '',
       });
+    } else {
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
-      toast.success('Bloqueio criado com sucesso.');
-      setForm((prev) => ({
-        ...prev,
-        date: '',
+      setForm((s) => ({
+        ...s,
+        date: s.date || dateStr,
         period: 'ALL_DAY',
-        scope: 'ALL',
-        areaId: '',
-        reason: '',
       }));
+    }
+  }, [open, editing]);
+
+  if (!open) return null;
+
+  const set = (k: keyof typeof form, v: any) =>
+    setForm((s) => ({ ...s, [k]: v }));
+
+  async function handleSave() {
+    if (!form.unitId) {
+      toast.error('Selecione uma unidade.');
+      return;
+    }
+    if (!form.date) {
+      toast.error('Selecione uma data.');
+      return;
+    }
+
+    const payload: any = {
+      unitId: form.unitId,
+      areaId: form.areaId || null,
+      date: form.date, // backend aceita YYYY-MM-DD
+      mode: 'PERIOD',
+      period: form.period,
+      reason: form.reason || null,
+    };
+
+    setSaving(true);
+    try {
+      if (editing) {
+        await api(`/v1/reservation-blocks/${editing.id}`, {
+          method: 'PUT',
+          body: payload,
+          auth: true,
+        });
+        toast.success('Bloqueio atualizado.');
+      } else {
+        await api('/v1/reservation-blocks', {
+          method: 'POST',
+          body: payload,
+          auth: true,
+        });
+        toast.success('Bloqueio criado.');
+      }
+      onSaved();
+      onClose();
     } catch (e: any) {
-      const msg = e?.error?.message || e?.message || 'Erro ao criar bloqueio.';
+      console.error(e);
+      const msg = e?.userMessage || e?.message || 'Erro ao salvar bloqueio.';
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -555,131 +598,439 @@ function BlockReservationsPanel() {
   }
 
   return (
-    <section className="container mt-4">
-      <div className="card">
-        <div className="flex flex-col gap-1 mb-3">
-          <h2 className="title text-2xl">Bloquear reservas</h2>
-          <p className="text-sm text-muted max-w-2xl">
-            Use esta tela para marcar dias ou períodos específicos como indisponíveis
-            para novas reservas. Isso afeta tanto o site público quanto o fluxo interno.
-          </p>
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={editing ? 'Editar bloqueio' : 'Novo bloqueio'}
+    >
+      <div className="card shadow-none w-full max-w-3xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
+        <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
+          <h3 className="title text-xl m-0">
+            {editing ? 'Editar bloqueio de reservas' : 'Novo bloqueio de reservas'}
+          </h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>
+            Fechar
+          </button>
         </div>
 
-        <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl">
-          <label>
-            <span>Unidade*</span>
-            <select
-              className="input py-2"
-              value={form.unitId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setField('unitId', v);
-                setField('areaId', '');
-              }}
-              disabled={loadingUnits || saving}
-            >
-              <option value="">{loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}</option>
-              {(units as any[]).map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
+        <div className="px-5 py-4 overflow-y-auto flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label>
+              <span>Unidade*</span>
+              <select
+                className="input py-2"
+                value={form.unitId}
+                onChange={(e) => {
+                  const newUnit = e.target.value || '';
+                  set('unitId', newUnit);
+                  set('areaId', '');
+                }}
+                disabled={loadingUnits || saving}
+              >
+                <option value="">{loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}</option>
+                {(units as any[]).map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </label>
 
-          <label>
-            <span>Data*</span>
-            <input
-              type="date"
-              className="input py-2"
-              value={form.date}
-              onChange={(e) => setField('date', e.target.value)}
-              disabled={saving}
-            />
-          </label>
+            <label>
+              <span>Área</span>
+              <select
+                className="input py-2"
+                value={form.areaId}
+                onChange={(e) => set('areaId', e.target.value || '')}
+                disabled={!form.unitId || areasByUnit.loading || saving}
+              >
+                <option value="">
+                  {!form.unitId
+                    ? 'Selecione uma unidade'
+                    : areasByUnit.loading
+                      ? 'Carregando áreas...'
+                      : 'Todas as áreas da unidade'}
+                </option>
+                {areasByUnit.data?.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </label>
 
-          <label>
-            <span>Período*</span>
-            <select
-              className="input py-2"
-              value={form.period}
-              onChange={(e) => setField('period', e.target.value as any)}
-              disabled={saving}
-            >
-              <option value="ALL_DAY">Dia todo</option>
-              <option value="AFTERNOON">Somente tarde</option>
-              <option value="NIGHT">Somente noite</option>
-            </select>
-          </label>
+            <label>
+              <span>Data*</span>
+              <input
+                className="input py-2"
+                type="date"
+                value={form.date}
+                onChange={(e) => set('date', e.target.value)}
+                disabled={saving}
+              />
+            </label>
 
-          <label>
-            <span>Escopo*</span>
-            <select
-              className="input py-2"
-              value={form.scope}
-              onChange={(e) => setField('scope', e.target.value as any)}
-              disabled={saving || !form.unitId}
-            >
-              <option value="ALL">Todas as áreas da unidade</option>
-              <option value="AREA">Apenas uma área específica</option>
-            </select>
-          </label>
+            <label>
+              <span>Período*</span>
+              <select
+                className="input py-2"
+                value={form.period}
+                onChange={(e) => set('period', e.target.value as any)}
+                disabled={saving}
+              >
+                <option value="ALL_DAY">Dia todo</option>
+                <option value="AFTERNOON">Somente tarde</option>
+                <option value="NIGHT">Somente noite</option>
+              </select>
+            </label>
 
-          <label className={form.scope === 'AREA' ? '' : 'opacity-60'}>
-            <span>Área {form.scope === 'AREA' ? '*' : '(opcional)'}</span>
-            <select
-              className="input py-2"
-              value={form.areaId}
-              onChange={(e) => setField('areaId', e.target.value)}
-              disabled={saving || !form.unitId || form.scope !== 'AREA' || areasByUnit.loading}
-            >
-              <option value="">
-                {!form.unitId
-                  ? 'Selecione uma unidade'
-                  : areasByUnit.loading
-                    ? 'Carregando áreas...'
-                    : 'Selecione a área'}
-              </option>
-              {areasByUnit.data?.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="md:col-span-2">
-            <span>Motivo</span>
-            <input
-              className="input py-2"
-              placeholder="Ex.: Evento fechado, manutenção, confraternização interna..."
-              value={form.reason}
-              onChange={(e) => setField('reason', e.target.value)}
-              disabled={saving}
-            />
-          </label>
-
-          <div className="md:col-span-2 flex justify-end gap-2 mt-2">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!canSubmit || saving}
-            >
-              {saving ? 'Salvando…' : 'Criar bloqueio'}
-            </button>
+            <label className="md:col-span-2">
+              <span>Motivo (opcional)</span>
+              <textarea
+                className="input"
+                rows={2}
+                value={form.reason}
+                onChange={(e) => set('reason', e.target.value)}
+                placeholder="Ex.: Evento fechado, manutenção, reforma..."
+                disabled={saving}
+              />
+            </label>
           </div>
-        </form>
+        </div>
 
-        <div className="mt-4 text-xs text-muted max-w-3xl">
-          <p className="mb-1">
-            • <b>Dia todo</b> cria um bloqueio com período <code>ALL_DAY</code>, impedindo reservas em
-            todos os horários da data escolhida.
-          </p>
-          <p className="mb-1">
-            • <b>Somente tarde</b> e <b>Somente noite</b> criam bloqueios específicos por período, respeitando
-            a lógica de capacidades de tarde/noite.
-          </p>
-          <p>
-            • Quando você seleciona &quot;Todas as áreas da unidade&quot;, o bloqueio vale para o Mané inteiro.
-          </p>
+        <div className="px-5 py-3 border-t border-border bg-card flex justify-end gap-2">
+          <button className="btn" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full border-2 border-border border-t-white animate-spin" />
+                Salvando…
+              </span>
+            ) : (
+              'Salvar bloqueio'
+            )}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Página: Bloquear Reservas ---------- */
+function BlocksPanel() {
+  const [filters, setFilters] = React.useState<{
+    unitId: string;
+    from: string;
+    to: string;
+  }>({
+    unitId: '',
+    from: '',
+    to: '',
+  });
+
+  const [blocks, setBlocks] = React.useState<ReservationBlockDTO[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<ReservationBlockDTO | null>(null);
+
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState<ReservationBlockDTO | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const { units, loading: loadingUnits } = useUnits(true);
+
+  const unitsById = React.useMemo<Record<string, string>>(
+    () => Object.fromEntries((units as any[]).map((u) => [u.id, u.name])),
+    [units],
+  );
+
+  const periodLabel = (p?: string | null) => {
+    if (!p) return '-';
+    if (p === 'ALL_DAY') return 'Dia todo';
+    if (p === 'AFTERNOON') return 'Tarde';
+    if (p === 'NIGHT') return 'Noite';
+    return p;
+  };
+
+  const modeLabel = (m?: string | null) => {
+    if (!m) return '-';
+    if (m === 'PERIOD') return 'Por período';
+    if (m === 'SLOTS') return 'Por horários';
+    return m;
+  };
+
+  function fmtDate(iso: string) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pt-BR');
+    } catch {
+      return iso;
+    }
+  }
+
+  // Carregar lista sempre que filtros mudarem
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const params: any = {};
+        if (filters.unitId) params.unitId = filters.unitId;
+        if (filters.from) params.from = filters.from;
+        if (filters.to) params.to = filters.to;
+
+        const qs = new URLSearchParams(params).toString();
+        const url = `/v1/reservation-blocks${qs ? `?${qs}` : ''}`;
+
+        const data = await api(url, { auth: true });
+        const list: ReservationBlockDTO[] = Array.isArray(data)
+          ? data
+          : (data.items as ReservationBlockDTO[]) || [];
+
+        if (!cancelled) setBlocks(list);
+      } catch (e: any) {
+        console.error(e);
+        if (!cancelled) setError(e?.message || 'Erro ao carregar bloqueios.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.unitId, filters.from, filters.to]);
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await api(`/v1/reservation-blocks/${deleteTarget.id}`, {
+        method: 'DELETE',
+        auth: true,
+      });
+      toast.success('Bloqueio removido.');
+      // reload
+      setFilters((s) => ({ ...s }));
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Erro ao remover bloqueio.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <section className="container mt-4">
+      <div className="card">
+        <h2 className="title text-2xl mb-3">Bloquear reservas</h2>
+
+        {/* Filtros */}
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 flex-1">
+            <label>
+              <span>Unidade</span>
+              <select
+                className="input"
+                value={filters.unitId}
+                onChange={(e) =>
+                  setFilters((s) => ({ ...s, unitId: e.target.value || '' }))
+                }
+                disabled={loadingUnits}
+              >
+                <option value="">
+                  {loadingUnits ? 'Carregando…' : 'Todas as unidades'}
+                </option>
+                {(units as any[]).map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>De</span>
+              <input
+                className="input"
+                type="date"
+                value={filters.from}
+                onChange={(e) =>
+                  setFilters((s) => ({ ...s, from: e.target.value }))
+                }
+              />
+            </label>
+
+            <label>
+              <span>Até</span>
+              <input
+                className="input"
+                type="date"
+                value={filters.to}
+                onChange={(e) =>
+                  setFilters((s) => ({ ...s, to: e.target.value }))
+                }
+              />
+            </label>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              className="btn"
+              onClick={() =>
+                setFilters((s) => ({
+                  ...s,
+                }))
+              }
+            >
+              Atualizar
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setEditing(null);
+                setModalOpen(true);
+              }}
+            >
+              Novo bloqueio
+            </button>
+          </div>
+        </div>
+
+        {/* Lista */}
+        {error && (
+          <div className="mb-2 text-danger text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th className="px-3 py-2">Data</th>
+                <th className="px-3 py-2">Unidade</th>
+                <th className="px-3 py-2">Área</th>
+                <th className="px-3 py-2">Modo</th>
+                <th className="px-3 py-2">Período</th>
+                <th className="px-3 py-2">Motivo</th>
+                <th className="px-3 py-2">Criado por</th>
+                <th className="px-3 py-2 text-right"></th>
+              </tr>
+            </thead>
+
+            {loading ? (
+              <tbody>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={`blk-sk-${i}`}>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-28" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-32" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-40" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            ) : (
+              <tbody>
+                {blocks.map((b) => {
+                  const unitName = unitsById[b.unitId] || '-';
+                  const areaName = (b as any).areaName || (b as any).area || (b.areaId ? b.areaId : 'Todas as áreas');
+                  return (
+                    <tr key={b.id}>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {fmtDate(b.date)}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">{unitName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{areaName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{modeLabel(b.mode)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{periodLabel(b.period)}</td>
+                      <td className="px-3 py-2">{b.reason || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{b.createdBy || '-'}</td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex gap-2 justify-end">
+                          <IconBtn
+                            title="Editar bloqueio"
+                            onClick={() => {
+                              setEditing(b);
+                              setModalOpen(true);
+                            }}
+                          >
+                            <PencilIcon />
+                          </IconBtn>
+                          <IconBtn
+                            title="Remover bloqueio"
+                            danger
+                            onClick={() => {
+                              setDeleteTarget(b);
+                              setDeleteOpen(true);
+                            }}
+                          >
+                            <TrashIcon />
+                          </IconBtn>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {blocks.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-4 text-center text-muted">
+                      Nenhum bloqueio encontrado para os filtros atuais.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            )}
+          </table>
+        </div>
+      </div>
+
+      {/* Modal de criar/editar */}
+      <BlockModal
+        open={modalOpen}
+        editing={editing}
+        onClose={() => setModalOpen(false)}
+        onSaved={() => setFilters((s) => ({ ...s }))}
+      />
+
+      {/* Confirm delete */}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Remover bloqueio"
+        description={
+          <div>
+            Tem certeza que deseja remover este bloqueio de reservas?<br />
+            <span className="text-muted text-sm">
+              Data: <b>{deleteTarget ? fmtDate(deleteTarget.date) : '-'}</b>
+              {deleteTarget?.period && <> • Período: <b>{periodLabel(deleteTarget.period)}</b></>}
+            </span>
+          </div>
+        }
+        confirmText="Remover"
+        cancelText="Cancelar"
+        variant="danger"
+        onCancel={() => {
+          if (!deleting) {
+            setDeleteOpen(false);
+            setDeleteTarget(null);
+          }
+        }}
+        onConfirm={handleDeleteConfirm}
+      />
     </section>
   );
 }
@@ -952,7 +1303,7 @@ function ReservationsTable({
                       </div>
                     </td>
 
-                    {/* Reserva (data/hora) */}
+                    {/* Reserva */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{when}</td>
 
                     {/* Pessoas */}
@@ -1513,7 +1864,7 @@ function IconBtn({
 export default function App() {
   const { token, user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
-  const [tab, setTab] = useState<'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios'>('reservas');
+  const [tab, setTab] = useState<'reservas' | 'unidades' | 'areas' | 'usuarios' | 'blocks'>('reservas');
 
   const isCheckinRoute = typeof window !== 'undefined' && window.location.pathname.includes('/checkin');
 
@@ -1592,12 +1943,12 @@ export default function App() {
               <NavTabs active={tab} onChange={setTab} isAdmin={isAdmin} />
               {tab === 'reservas' ? (
                 <ReservationsPanel />
-              ) : tab === 'bloqueios' ? (
-                <BlockReservationsPanel />
               ) : tab === 'unidades' ? (
                 <UnitsPage />
               ) : tab === 'areas' ? (
                 <AreasPage />
+              ) : tab === 'blocks' ? (
+                <BlocksPanel />
               ) : (
                 <UsersPage />
               )}
@@ -1615,12 +1966,12 @@ function NavTabs({
   onChange,
   isAdmin,
 }: {
-  active: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
-  onChange: (t: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios') => void;
+  active: 'reservas' | 'unidades' | 'areas' | 'usuarios' | 'blocks';
+  onChange: (t: 'reservas' | 'unidades' | 'areas' | 'usuarios' | 'blocks') => void;
   isAdmin: boolean;
 }) {
   const items: Array<{
-    key: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
+    key: 'reservas' | 'unidades' | 'areas' | 'usuarios' | 'blocks';
     label: string;
     icon: React.ReactNode;
     adminOnly?: boolean;
@@ -1631,19 +1982,6 @@ function NavTabs({
       icon: (
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 7h18" /><path d="M8 3v4M16 3v4" /><rect x="3" y="5" width="18" height="16" rx="2" />
-        </svg>
-      ),
-    },
-    {
-      key: 'bloqueios',
-      label: 'Bloquear reservas',
-      adminOnly: true,
-      icon: (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="18" rx="2" />
-          <path d="M3 10h18" />
-          <path d="M16 2v4M8 2v4" />
-          <path d="M9 16l6-6" />
         </svg>
       ),
     },
@@ -1667,6 +2005,28 @@ function NavTabs({
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      ),
+    },
+    {
+      key: 'blocks',
+      label: 'Bloquear reservas',
+      adminOnly: true,
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M8 12h8" />
+          <path d="M12 8v8" />
         </svg>
       ),
     },
