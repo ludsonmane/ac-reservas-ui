@@ -50,9 +50,6 @@ function compact<T extends Record<string, any>>(obj: T): Partial<T> {
   return out as Partial<T>;
 }
 
-/* ---------- tipos auxiliares ---------- */
-type BlockPeriod = 'AFTERNOON' | 'NIGHT' | 'ALL_DAY';
-
 /* ---------- Loading Modal (inline) ---------- */
 function LoadingDialog({
   open = false,
@@ -473,6 +470,218 @@ function reservationTypeLabel(raw?: string | null) {
   }
   // fallback: capitaliza o original
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+/* ---------- Painel: Bloquear Reservas ---------- */
+function BlockReservationsPanel() {
+  const [form, setForm] = useState<{
+    unitId: string;
+    date: string;
+    period: 'ALL_DAY' | 'AFTERNOON' | 'NIGHT';
+    scope: 'ALL' | 'AREA';
+    areaId: string;
+    reason: string;
+  }>({
+    unitId: '',
+    date: '',
+    period: 'ALL_DAY',
+    scope: 'ALL',
+    areaId: '',
+    reason: '',
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  const { units, loading: loadingUnits } = useUnits(true);
+  const areasByUnit = useAreasByUnit(form.unitId || undefined, !!form.unitId);
+
+  function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const canSubmit =
+    !!form.unitId &&
+    !!form.date &&
+    !!form.period &&
+    (form.scope === 'ALL' || !!form.areaId);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit || saving) return;
+
+    try {
+      setSaving(true);
+
+      // monta data em ISO (inicio do dia)
+      const d = new Date(`${form.date}T00:00:00`);
+      if (Number.isNaN(d.getTime())) {
+        toast.error('Data inválida.');
+        setSaving(false);
+        return;
+      }
+
+      const payload: any = {
+        unitId: form.unitId,
+        // se for "todas as áreas", manda null
+        areaId: form.scope === 'ALL' ? null : form.areaId || null,
+        date: d.toISOString(),
+        mode: 'PERIOD',           // usamos sempre PERIOD
+        period: form.period,      // 'ALL_DAY' | 'AFTERNOON' | 'NIGHT'
+        slots: null,
+        reason: form.reason || 'Bloqueio criado pelo admin.',
+      };
+
+      await api('/v1/admin/blocks', {
+        method: 'POST',
+        body: payload,
+        auth: true,
+      });
+
+      toast.success('Bloqueio criado com sucesso.');
+      setForm((prev) => ({
+        ...prev,
+        date: '',
+        period: 'ALL_DAY',
+        scope: 'ALL',
+        areaId: '',
+        reason: '',
+      }));
+    } catch (e: any) {
+      const msg = e?.error?.message || e?.message || 'Erro ao criar bloqueio.';
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="container mt-4">
+      <div className="card">
+        <div className="flex flex-col gap-1 mb-3">
+          <h2 className="title text-2xl">Bloquear reservas</h2>
+          <p className="text-sm text-muted max-w-2xl">
+            Use esta tela para marcar dias ou períodos específicos como indisponíveis
+            para novas reservas. Isso afeta tanto o site público quanto o fluxo interno.
+          </p>
+        </div>
+
+        <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl">
+          <label>
+            <span>Unidade*</span>
+            <select
+              className="input py-2"
+              value={form.unitId}
+              onChange={(e) => {
+                const v = e.target.value;
+                setField('unitId', v);
+                setField('areaId', '');
+              }}
+              disabled={loadingUnits || saving}
+            >
+              <option value="">{loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}</option>
+              {(units as any[]).map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Data*</span>
+            <input
+              type="date"
+              className="input py-2"
+              value={form.date}
+              onChange={(e) => setField('date', e.target.value)}
+              disabled={saving}
+            />
+          </label>
+
+          <label>
+            <span>Período*</span>
+            <select
+              className="input py-2"
+              value={form.period}
+              onChange={(e) => setField('period', e.target.value as any)}
+              disabled={saving}
+            >
+              <option value="ALL_DAY">Dia todo</option>
+              <option value="AFTERNOON">Somente tarde</option>
+              <option value="NIGHT">Somente noite</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Escopo*</span>
+            <select
+              className="input py-2"
+              value={form.scope}
+              onChange={(e) => setField('scope', e.target.value as any)}
+              disabled={saving || !form.unitId}
+            >
+              <option value="ALL">Todas as áreas da unidade</option>
+              <option value="AREA">Apenas uma área específica</option>
+            </select>
+          </label>
+
+          <label className={form.scope === 'AREA' ? '' : 'opacity-60'}>
+            <span>Área {form.scope === 'AREA' ? '*' : '(opcional)'}</span>
+            <select
+              className="input py-2"
+              value={form.areaId}
+              onChange={(e) => setField('areaId', e.target.value)}
+              disabled={saving || !form.unitId || form.scope !== 'AREA' || areasByUnit.loading}
+            >
+              <option value="">
+                {!form.unitId
+                  ? 'Selecione uma unidade'
+                  : areasByUnit.loading
+                    ? 'Carregando áreas...'
+                    : 'Selecione a área'}
+              </option>
+              {areasByUnit.data?.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="md:col-span-2">
+            <span>Motivo</span>
+            <input
+              className="input py-2"
+              placeholder="Ex.: Evento fechado, manutenção, confraternização interna..."
+              value={form.reason}
+              onChange={(e) => setField('reason', e.target.value)}
+              disabled={saving}
+            />
+          </label>
+
+          <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={!canSubmit || saving}
+            >
+              {saving ? 'Salvando…' : 'Criar bloqueio'}
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-4 text-xs text-muted max-w-3xl">
+          <p className="mb-1">
+            • <b>Dia todo</b> cria um bloqueio com período <code>ALL_DAY</code>, impedindo reservas em
+            todos os horários da data escolhida.
+          </p>
+          <p className="mb-1">
+            • <b>Somente tarde</b> e <b>Somente noite</b> criam bloqueios específicos por período, respeitando
+            a lógica de capacidades de tarde/noite.
+          </p>
+          <p>
+            • Quando você seleciona &quot;Todas as áreas da unidade&quot;, o bloqueio vale para o Mané inteiro.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /* ---------- Tabela de Reservas (ajustada) ---------- */
@@ -1099,7 +1308,7 @@ function ReservationModal({
                 <option value="">{!form.unitId ? 'Selecione uma unidade' : (areasByUnit.loading ? 'Carregando áreas...' : 'Selecione uma área')}</option>
                 {areasByUnit.data?.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}{(a as any).capacity ? ` (${(a as any).capacity})` : ''}
+                    {a.name}{a.capacity ? ` (${a.capacity})` : ''}
                   </option>
                 ))}
               </select>
@@ -1184,91 +1393,6 @@ function ReservationsPanel() {
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Reservation | null>(null);
 
-  // ---- estados do formulário de bloqueio ----
-  const { units } = useUnits(true);
-  const [blockUnitId, setBlockUnitId] = useState<string>('');
-  const [blockDate, setBlockDate] = useState('');
-  const [blockPeriod, setBlockPeriod] = useState<BlockPeriod>('ALL_DAY');
-  const [blockScope, setBlockScope] = useState<'ALL_AREAS' | 'SOME_AREAS'>('ALL_AREAS');
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
-  const [blockReason, setBlockReason] = useState('');
-  const [isBlocking, setIsBlocking] = useState(false);
-
-  const blockAreas = useAreasByUnit(blockUnitId || undefined, !!blockUnitId);
-
-  // sincronizar unidade de bloqueio com filtro quando vazio
-  useEffect(() => {
-    if (!blockUnitId && filters.unitId) {
-      setBlockUnitId(filters.unitId);
-    }
-  }, [filters.unitId, blockUnitId]);
-
-  function toggleArea(areaId: string) {
-    setSelectedAreas((prev) =>
-      prev.includes(areaId)
-        ? prev.filter((id) => id !== areaId)
-        : [...prev, areaId],
-    );
-  }
-
-  async function handleSubmitBlock(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!blockUnitId) {
-      toast.error('Selecione a unidade para bloquear.');
-      return;
-    }
-    if (!blockDate) {
-      toast.error('Selecione a data do bloqueio.');
-      return;
-    }
-    if (blockScope === 'SOME_AREAS' && selectedAreas.length === 0) {
-      toast.error('Selecione pelo menos uma área ou escolha "Todas as áreas".');
-      return;
-    }
-
-    try {
-      setIsBlocking(true);
-
-      if (blockScope === 'ALL_AREAS') {
-        await api('/v1/blocks/period', {
-          method: 'POST',
-          auth: true,
-          body: {
-            unitId: blockUnitId,
-            date: blockDate,
-            period: blockPeriod,
-            reason: blockReason || undefined,
-            areaId: null,
-          },
-        });
-      } else {
-        for (const areaId of selectedAreas) {
-          await api('/v1/blocks/period', {
-            method: 'POST',
-            auth: true,
-            body: {
-              unitId: blockUnitId,
-              date: blockDate,
-              period: blockPeriod,
-              reason: blockReason || undefined,
-              areaId,
-            },
-          });
-        }
-      }
-
-      toast.success('Bloqueio criado com sucesso!');
-      setSelectedAreas([]);
-    } catch (err: any) {
-      console.error(err);
-      const msg = err?.error?.message || err?.message || 'Erro ao criar bloqueio.';
-      toast.error(msg);
-    } finally {
-      setIsBlocking(false);
-    }
-  }
-
   // debounce do texto de busca
   const [searchDebounced, setSearchDebounced] = useState('');
   useEffect(() => {
@@ -1308,156 +1432,7 @@ function ReservationsPanel() {
   }
 
   return (
-    <section className="container mt-4 space-y-4">
-      {/* Card de Bloqueio de reservas */}
-      <form
-        onSubmit={handleSubmitBlock}
-        className="card p-4 flex flex-col gap-3"
-      >
-        <h2 className="text-base font-semibold">
-          Bloquear reservas (operacional)
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Unidade */}
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Unidade</span>
-            <select
-              className="input px-2 py-1"
-              value={blockUnitId}
-              onChange={(e) => {
-                setBlockUnitId(e.target.value);
-                setSelectedAreas([]);
-              }}
-            >
-              <option value="">Selecione a unidade</option>
-              {(units as any[]).map((u: any) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
-
-          {/* Data */}
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Data</span>
-            <input
-              type="date"
-              className="input px-2 py-1"
-              value={blockDate}
-              onChange={(e) => setBlockDate(e.target.value)}
-            />
-          </label>
-
-          {/* Período */}
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Período</span>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`btn btn-sm ${blockPeriod === 'ALL_DAY' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setBlockPeriod('ALL_DAY')}
-              >
-                Dia inteiro
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${blockPeriod === 'AFTERNOON' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setBlockPeriod('AFTERNOON')}
-              >
-                Tarde
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${blockPeriod === 'NIGHT' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setBlockPeriod('NIGHT')}
-              >
-                Noite
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Escopo do bloqueio */}
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Aplicar bloqueio em</span>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <label className="inline-flex items-center gap-1">
-              <input
-                type="radio"
-                name="blockScope"
-                value="ALL_AREAS"
-                checked={blockScope === 'ALL_AREAS'}
-                onChange={() => setBlockScope('ALL_AREAS')}
-              />
-              <span>Todas as áreas da unidade</span>
-            </label>
-
-            <label className="inline-flex items-center gap-1">
-              <input
-                type="radio"
-                name="blockScope"
-                value="SOME_AREAS"
-                checked={blockScope === 'SOME_AREAS'}
-                onChange={() => setBlockScope('SOME_AREAS')}
-              />
-              <span>Apenas áreas selecionadas</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Áreas (quando escopo = SOME_AREAS) */}
-        {blockScope === 'SOME_AREAS' && blockUnitId && (
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Áreas da unidade</span>
-            <div className="flex flex-wrap gap-2">
-              {blockAreas.loading && (
-                <span className="text-xs text-muted">Carregando áreas…</span>
-              )}
-              {!blockAreas.loading && (blockAreas.data?.length ?? 0) === 0 && (
-                <span className="text-xs text-muted">Nenhuma área encontrada para esta unidade.</span>
-              )}
-              {!blockAreas.loading && blockAreas.data?.map((a: any) => (
-                <label
-                  key={a.id}
-                  className="inline-flex items-center gap-1 border rounded px-2 py-1 text-xs cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedAreas.includes(a.id)}
-                    onChange={() => toggleArea(a.id)}
-                  />
-                  <span>{a.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Motivo (opcional) */}
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium">
-            Motivo (opcional)
-          </label>
-          <input
-            className="input px-2 py-1"
-            placeholder="Ex.: Evento fechado, manutenção, feriado..."
-            value={blockReason}
-            onChange={(e) => setBlockReason(e.target.value)}
-          />
-        </div>
-
-        <div className="flex justify-end mt-2">
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={isBlocking || !blockUnitId || !blockDate}
-          >
-            {isBlocking ? 'Aplicando bloqueio...' : 'Bloquear reservas'}
-          </button>
-        </div>
-      </form>
-
-      {/* Card de Reservas */}
+    <section className="container mt-4">
       <div className="card">
         <h2 className="title text-2xl mb-3">Reservas</h2>
         <FiltersBar value={filters} onChange={setFilters} />
@@ -1538,7 +1513,7 @@ function IconBtn({
 export default function App() {
   const { token, user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
-  const [tab, setTab] = useState<'reservas' | 'unidades' | 'areas' | 'usuarios'>('reservas');
+  const [tab, setTab] = useState<'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios'>('reservas');
 
   const isCheckinRoute = typeof window !== 'undefined' && window.location.pathname.includes('/checkin');
 
@@ -1617,6 +1592,8 @@ export default function App() {
               <NavTabs active={tab} onChange={setTab} isAdmin={isAdmin} />
               {tab === 'reservas' ? (
                 <ReservationsPanel />
+              ) : tab === 'bloqueios' ? (
+                <BlockReservationsPanel />
               ) : tab === 'unidades' ? (
                 <UnitsPage />
               ) : tab === 'areas' ? (
@@ -1638,62 +1615,75 @@ function NavTabs({
   onChange,
   isAdmin,
 }: {
-  active: 'reservas' | 'unidades' | 'areas' | 'usuarios';
-  onChange: (t: 'reservas' | 'unidades' | 'areas' | 'usuarios') => void;
+  active: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
+  onChange: (t: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios') => void;
   isAdmin: boolean;
 }) {
   const items: Array<{
-    key: 'reservas' | 'unidades' | 'areas' | 'usuarios';
+    key: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
     label: string;
     icon: React.ReactNode;
     adminOnly?: boolean;
   }> = [
-      {
-        key: 'reservas',
-        label: 'Reservas',
-        icon: (
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 7h18" /><path d="M8 3v4M16 3v4" /><rect x="3" y="5" width="18" height="16" rx="2" />
-          </svg>
-        ),
-      },
-      {
-        key: 'unidades',
-        label: 'Unidades',
-        adminOnly: true,
-        icon: (
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 9l9-6 9 6" /><path d="M9 22V12h6v10" /><path d="M3 10v12h18V10" />
-          </svg>
-        ),
-      },
-      {
-        key: 'areas',
-        label: 'Áreas',
-        adminOnly: true,
-        icon: (
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="3" width="7" height="7" rx="1.5" />
-            <rect x="14" y="3" width="7" height="7" rx="1.5" />
-            <rect x="3" y="14" width="7" height="7" rx="1.5" />
-            <rect x="14" y="14" width="7" height="7" rx="1.5" />
-          </svg>
-        ),
-      },
-      {
-        key: 'usuarios',
-        label: 'Usuários',
-        adminOnly: true,
-        icon: (
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
-        ),
-      },
-    ];
+    {
+      key: 'reservas',
+      label: 'Reservas',
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 7h18" /><path d="M8 3v4M16 3v4" /><rect x="3" y="5" width="18" height="16" rx="2" />
+        </svg>
+      ),
+    },
+    {
+      key: 'bloqueios',
+      label: 'Bloquear reservas',
+      adminOnly: true,
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M3 10h18" />
+          <path d="M16 2v4M8 2v4" />
+          <path d="M9 16l6-6" />
+        </svg>
+      ),
+    },
+    {
+      key: 'unidades',
+      label: 'Unidades',
+      adminOnly: true,
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 9l9-6 9 6" /><path d="M9 22V12h6v10" /><path d="M3 10v12h18V10" />
+        </svg>
+      ),
+    },
+    {
+      key: 'areas',
+      label: 'Áreas',
+      adminOnly: true,
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      ),
+    },
+    {
+      key: 'usuarios',
+      label: 'Usuários',
+      adminOnly: true,
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+    },
+  ];
 
   const visible = items.filter((i) => !i.adminOnly || isAdmin);
 
