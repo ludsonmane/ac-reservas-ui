@@ -50,6 +50,9 @@ function compact<T extends Record<string, any>>(obj: T): Partial<T> {
   return out as Partial<T>;
 }
 
+/* ---------- tipos auxiliares ---------- */
+type BlockPeriod = 'AFTERNOON' | 'NIGHT' | 'ALL_DAY';
+
 /* ---------- Loading Modal (inline) ---------- */
 function LoadingDialog({
   open = false,
@@ -530,23 +533,14 @@ function ReservationsTable({
         const tipoLabel = reservationTypeLabel(rTypeRaw);
 
         return [
-          // NOME
           nome,
-          // CELULAR
           phone,
-          // SOLICITAÇÃO (DATA)
           createdDateTxt,
-          // CANAL
           origem,
-          // TIPO DE RESERVA
           tipoLabel,
-          // DATA DA RESERVA
           dataReservaTxt,
-          // QUANTIDADE
           pessoas,
-          // HORARIO
           horarioTxt,
-          // STATUS
           r.status || '',
         ];
       });
@@ -680,7 +674,6 @@ function ReservationsTable({
 
                 const qrUrl = apiUrl(`/v1/reservations/${r.id}/qrcode?v=${qrBust}`);
 
-                // 👇 ler o tipo a partir de múltiplas chaves
                 const rTypeRaw =
                   (r as any).reservationType ??
                   (r as any).reservation_type ??
@@ -702,7 +695,7 @@ function ReservationsTable({
                       </div>
                     </td>
 
-                    {/* Tipo de Reserva (logo após Criada em) */}
+                    {/* Tipo de Reserva */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">
                       {reservationTypeLabel(rTypeRaw)}
                     </td>
@@ -731,7 +724,7 @@ function ReservationsTable({
                     {/* CPF */}
                     <td className="px-3 py-2 align-top whitespace-nowrap">{(r as any).cpf || '-'}</td>
 
-                    {/* Cliente (nome + email / telefone) */}
+                    {/* Cliente */}
                     <td className="px-3 py-2 align-top min-w-[260px]">
                       <div className="flex items-center gap-2">
                         <img
@@ -875,8 +868,8 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
           >
             <option value="">{loadingUnits ? 'Carregando…' : 'Todas'}</option>
             {(units as any[]).map((u) => (
-              <option key={(u && typeof u === 'object' ? u.id : '')} value={(u && typeof u === 'object' ? u.id : '')}>
-                {(u && typeof u === 'object' ? u.name : String(u ?? ''))}
+              <option key={unitIdOf(u)} value={unitIdOf(u)}>
+                {unitNameOf(u)}
               </option>
             ))}
           </select>
@@ -1106,7 +1099,7 @@ function ReservationModal({
                 <option value="">{!form.unitId ? 'Selecione uma unidade' : (areasByUnit.loading ? 'Carregando áreas...' : 'Selecione uma área')}</option>
                 {areasByUnit.data?.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}{a.capacity ? ` (${a.capacity})` : ''}
+                    {a.name}{(a as any).capacity ? ` (${(a as any).capacity})` : ''}
                   </option>
                 ))}
               </select>
@@ -1178,7 +1171,7 @@ function ReservationsPanel() {
   const [filters, setFilters] = useState<any>({
     page: 1, pageSize: 25, showModal: false, editing: null,
     unitId: '',
-    unitSlug: '',   // 👈 ADD
+    unitSlug: '',
     areaId: '',
     search: '',
     from: '',
@@ -1191,6 +1184,91 @@ function ReservationsPanel() {
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Reservation | null>(null);
 
+  // ---- estados do formulário de bloqueio ----
+  const { units } = useUnits(true);
+  const [blockUnitId, setBlockUnitId] = useState<string>('');
+  const [blockDate, setBlockDate] = useState('');
+  const [blockPeriod, setBlockPeriod] = useState<BlockPeriod>('ALL_DAY');
+  const [blockScope, setBlockScope] = useState<'ALL_AREAS' | 'SOME_AREAS'>('ALL_AREAS');
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [blockReason, setBlockReason] = useState('');
+  const [isBlocking, setIsBlocking] = useState(false);
+
+  const blockAreas = useAreasByUnit(blockUnitId || undefined, !!blockUnitId);
+
+  // sincronizar unidade de bloqueio com filtro quando vazio
+  useEffect(() => {
+    if (!blockUnitId && filters.unitId) {
+      setBlockUnitId(filters.unitId);
+    }
+  }, [filters.unitId, blockUnitId]);
+
+  function toggleArea(areaId: string) {
+    setSelectedAreas((prev) =>
+      prev.includes(areaId)
+        ? prev.filter((id) => id !== areaId)
+        : [...prev, areaId],
+    );
+  }
+
+  async function handleSubmitBlock(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!blockUnitId) {
+      toast.error('Selecione a unidade para bloquear.');
+      return;
+    }
+    if (!blockDate) {
+      toast.error('Selecione a data do bloqueio.');
+      return;
+    }
+    if (blockScope === 'SOME_AREAS' && selectedAreas.length === 0) {
+      toast.error('Selecione pelo menos uma área ou escolha "Todas as áreas".');
+      return;
+    }
+
+    try {
+      setIsBlocking(true);
+
+      if (blockScope === 'ALL_AREAS') {
+        await api('/v1/blocks/period', {
+          method: 'POST',
+          auth: true,
+          body: {
+            unitId: blockUnitId,
+            date: blockDate,
+            period: blockPeriod,
+            reason: blockReason || undefined,
+            areaId: null,
+          },
+        });
+      } else {
+        for (const areaId of selectedAreas) {
+          await api('/v1/blocks/period', {
+            method: 'POST',
+            auth: true,
+            body: {
+              unitId: blockUnitId,
+              date: blockDate,
+              period: blockPeriod,
+              reason: blockReason || undefined,
+              areaId,
+            },
+          });
+        }
+      }
+
+      toast.success('Bloqueio criado com sucesso!');
+      setSelectedAreas([]);
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.error?.message || err?.message || 'Erro ao criar bloqueio.';
+      toast.error(msg);
+    } finally {
+      setIsBlocking(false);
+    }
+  }
+
   // debounce do texto de busca
   const [searchDebounced, setSearchDebounced] = useState('');
   useEffect(() => {
@@ -1198,7 +1276,7 @@ function ReservationsPanel() {
     return () => clearTimeout(t);
   }, [filters.search]);
 
-  // 🔒 Whitelist dos filtros enviados ao hook/API
+  // filtros enviados ao hook/API
   const derivedFilters = useMemo(() => {
     const only = {
       page: filters.page,
@@ -1230,7 +1308,156 @@ function ReservationsPanel() {
   }
 
   return (
-    <section className="container mt-4">
+    <section className="container mt-4 space-y-4">
+      {/* Card de Bloqueio de reservas */}
+      <form
+        onSubmit={handleSubmitBlock}
+        className="card p-4 flex flex-col gap-3"
+      >
+        <h2 className="text-base font-semibold">
+          Bloquear reservas (operacional)
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Unidade */}
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Unidade</span>
+            <select
+              className="input px-2 py-1"
+              value={blockUnitId}
+              onChange={(e) => {
+                setBlockUnitId(e.target.value);
+                setSelectedAreas([]);
+              }}
+            >
+              <option value="">Selecione a unidade</option>
+              {(units as any[]).map((u: any) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {/* Data */}
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Data</span>
+            <input
+              type="date"
+              className="input px-2 py-1"
+              value={blockDate}
+              onChange={(e) => setBlockDate(e.target.value)}
+            />
+          </label>
+
+          {/* Período */}
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Período</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`btn btn-sm ${blockPeriod === 'ALL_DAY' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setBlockPeriod('ALL_DAY')}
+              >
+                Dia inteiro
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${blockPeriod === 'AFTERNOON' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setBlockPeriod('AFTERNOON')}
+              >
+                Tarde
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${blockPeriod === 'NIGHT' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setBlockPeriod('NIGHT')}
+              >
+                Noite
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Escopo do bloqueio */}
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Aplicar bloqueio em</span>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                name="blockScope"
+                value="ALL_AREAS"
+                checked={blockScope === 'ALL_AREAS'}
+                onChange={() => setBlockScope('ALL_AREAS')}
+              />
+              <span>Todas as áreas da unidade</span>
+            </label>
+
+            <label className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                name="blockScope"
+                value="SOME_AREAS"
+                checked={blockScope === 'SOME_AREAS'}
+                onChange={() => setBlockScope('SOME_AREAS')}
+              />
+              <span>Apenas áreas selecionadas</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Áreas (quando escopo = SOME_AREAS) */}
+        {blockScope === 'SOME_AREAS' && blockUnitId && (
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Áreas da unidade</span>
+            <div className="flex flex-wrap gap-2">
+              {blockAreas.loading && (
+                <span className="text-xs text-muted">Carregando áreas…</span>
+              )}
+              {!blockAreas.loading && (blockAreas.data?.length ?? 0) === 0 && (
+                <span className="text-xs text-muted">Nenhuma área encontrada para esta unidade.</span>
+              )}
+              {!blockAreas.loading && blockAreas.data?.map((a: any) => (
+                <label
+                  key={a.id}
+                  className="inline-flex items-center gap-1 border rounded px-2 py-1 text-xs cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedAreas.includes(a.id)}
+                    onChange={() => toggleArea(a.id)}
+                  />
+                  <span>{a.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Motivo (opcional) */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium">
+            Motivo (opcional)
+          </label>
+          <input
+            className="input px-2 py-1"
+            placeholder="Ex.: Evento fechado, manutenção, feriado..."
+            value={blockReason}
+            onChange={(e) => setBlockReason(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-end mt-2">
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={isBlocking || !blockUnitId || !blockDate}
+          >
+            {isBlocking ? 'Aplicando bloqueio...' : 'Bloquear reservas'}
+          </button>
+        </div>
+      </form>
+
+      {/* Card de Reservas */}
       <div className="card">
         <h2 className="title text-2xl mb-3">Reservas</h2>
         <FiltersBar value={filters} onChange={setFilters} />

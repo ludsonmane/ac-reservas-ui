@@ -24,21 +24,52 @@ function sanitizeBase(b?: string | null) {
   return s ? s.replace(/\/+$/, '') : '';
 }
 
+function envGet(key: string): string | undefined {
+  // Next.js / Node (sem referenciar "process" diretamente)
+  const nodeEnv = (globalThis as any)?.process?.env;
+  if (nodeEnv && typeof nodeEnv[key] === 'string') return String(nodeEnv[key]);
+
+  // Vite / ESM
+  const meta = (import.meta as AnyObj)?.env as AnyObj | undefined;
+  if (meta && typeof meta[key] === 'string') return String(meta[key]);
+
+  return undefined;
+}
+
 const fromRuntime = typeof window !== 'undefined' ? window.__CFG?.API_BASE_URL : '';
+const fromNextA   = envGet('NEXT_PUBLIC_API_BASE');
+const fromNextB   = envGet('NEXT_PUBLIC_API_URL');
+const fromNextC   = envGet('NEXT_PUBLIC_API_BASE_URL');
+const fromVite    = envGet('VITE_API_BASE_URL');
 const fromStorage = typeof window !== 'undefined' ? localStorage.getItem('BASE_URL') : '';
-const fromVite = (import.meta as AnyObj)?.env?.VITE_API_BASE_URL as string | undefined;
 
 /** Ordem:
  * 1) window.__CFG.API_BASE_URL
- * 2) localStorage.BASE_URL
- * 3) import.meta.env.VITE_API_BASE_URL
- * 4) vazio → chamadas relativas
+ * 2) NEXT_PUBLIC_API_BASE / NEXT_PUBLIC_API_URL / NEXT_PUBLIC_API_BASE_URL
+ * 3) VITE_API_BASE_URL
+ * 4) localStorage.BASE_URL (override manual)
  */
 let BASE_URL =
   sanitizeBase(fromRuntime) ||
-  sanitizeBase(fromStorage) ||
+  sanitizeBase(fromNextA) ||
+  sanitizeBase(fromNextB) ||
+  sanitizeBase(fromNextC) ||
   sanitizeBase(fromVite) ||
+  sanitizeBase(fromStorage) ||
   '';
+
+const isProd =
+  ((import.meta as any)?.env?.PROD === true) ||
+  (((globalThis as any)?.process?.env?.NODE_ENV) === 'production');
+
+if (!BASE_URL) {
+  const msg = '[api] BASE_URL ausente — defina NEXT_PUBLIC_API_BASE (ou window.__CFG.API_BASE_URL).';
+  if (isProd) {
+    throw new Error(msg);
+  } else {
+    console.warn(msg, 'Usando URLs relativas apenas em dev.');
+  }
+}
 
 export function setBaseUrl(url: string) {
   const clean = sanitizeBase(url);
@@ -56,7 +87,7 @@ function getToken() {
 
 /* ---------------- helpers ---------------- */
 function joinUrl(base: string, path: string) {
-  if (!base) return path; // chamada relativa
+  if (!base) return path; // chamada relativa (somente dev se não configurado)
   const b = base.replace(/\/+$/, '');
   const p = path.replace(/^\/+/, '');
   return `${b}/${p}`;
@@ -119,7 +150,11 @@ export async function api(path: string, opts: FetchOpts = {}) {
     headers['Pragma'] = 'no-cache';
   }
 
-  const init: RequestInit = { method, headers };
+  const init: RequestInit = {
+    method,
+    headers,
+    credentials: 'include',
+  };
 
   // Body: respeita FormData / Blob / ArrayBuffer
   if (opts.body !== undefined && opts.body !== null) {
@@ -216,7 +251,6 @@ export async function api(path: string, opts: FetchOpts = {}) {
 
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) handleAuthExpiry(parsed);
-      // mantém forma parecida com ramo JSON
       const errMsg = typeof parsed === 'string' ? parsed : (parsed?.error || parsed?.message || 'Erro');
       throw { status: res.status, error: errMsg };
     }
@@ -226,11 +260,10 @@ export async function api(path: string, opts: FetchOpts = {}) {
   }
 }
 
-// constrói URL absoluta para a API (respeita window.__CFG / VITE / etc)
+// constrói URL absoluta para a API (respeita BASE_URL resolvida acima)
 export function apiUrl(path: string) {
   const isAbs = /^https?:\/\//i.test(path);
   if (isAbs) return path;
-  // reutiliza BASE_URL e joinUrl já definidos neste módulo
   // @ts-ignore
   return joinUrl(BASE_URL, path);
 }

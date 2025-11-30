@@ -6,9 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "vite preview --host 0.0.0.0 --port 5173",
     "preview": "vite preview --strictPort --host 0.0.0.0 --port ${PORT:-5173}"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.3.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
