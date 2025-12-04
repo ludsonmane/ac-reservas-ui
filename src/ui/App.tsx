@@ -495,14 +495,42 @@ function BlockReservationsPanel() {
   const [saving, setSaving] = useState(false);
   const [blocks, setBlocks] = useState<any[]>([]);
   const [loadingBlocks, setLoadingBlocks] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // ---------- Estado do modal de edição ----------
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState<{
+    id: string;
+    unitId: string;
+    date: string;
+    period: 'ALL_DAY' | 'AFTERNOON' | 'NIGHT';
+    scope: 'ALL' | 'AREA';
+    areaId: string;
+    reason: string;
+  }>({
+    id: '',
+    unitId: '',
+    date: '',
+    period: 'ALL_DAY',
+    scope: 'ALL',
+    areaId: '',
+    reason: '',
+  });
 
   const { units, loading: loadingUnits } = useUnits(true);
   const areasByUnit = useAreasByUnit(form.unitId || undefined, !!form.unitId);
+  const editAreasByUnit = useAreasByUnit(
+    editForm.unitId || undefined,
+    !!editForm.unitId && editModalOpen,
+  );
 
   function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setEditField<K extends keyof typeof editForm>(key: K, value: (typeof editForm)[K]) {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
   }
 
   const canSubmit =
@@ -566,6 +594,7 @@ function BlockReservationsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.unitId]);
 
+  // ---------- CRIAR NOVO BLOQUEIO ----------
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit || saving) return;
@@ -586,13 +615,8 @@ function BlockReservationsPanel() {
         areaId: form.scope === 'ALL' ? null : form.areaId || null,
       };
 
-      if (editingId) {
-        await updateBlock(editingId, payload);
-        toast.success('Bloqueio atualizado com sucesso.');
-      } else {
-        await createBlock(payload);
-        toast.success('Bloqueio criado com sucesso.');
-      }
+      await createBlock(payload);
+      toast.success('Bloqueio criado com sucesso.');
 
       setForm((prev) => ({
         ...prev,
@@ -602,7 +626,6 @@ function BlockReservationsPanel() {
         areaId: '',
         reason: '',
       }));
-      setEditingId(null);
 
       await loadBlocks();
     } catch (e: any) {
@@ -613,7 +636,8 @@ function BlockReservationsPanel() {
     }
   }
 
-  function handleEdit(block: any) {
+  // ---------- ABRIR MODAL DE EDIÇÃO ----------
+  function openEditModal(block: any) {
     const rawDate = block.date || block.blockDate;
     const dateStr =
       typeof rawDate === 'string'
@@ -622,7 +646,8 @@ function BlockReservationsPanel() {
         ? rawDate.toISOString().slice(0, 10)
         : '';
 
-    setForm({
+    setEditForm({
+      id: block.id,
       unitId: block.unitId,
       date: dateStr,
       period: (block.period || block.blockPeriod || 'ALL_DAY') as any,
@@ -630,13 +655,16 @@ function BlockReservationsPanel() {
       areaId: block.areaId || '',
       reason: block.reason || '',
     });
-    setEditingId(block.id);
+
+    setEditModalOpen(true);
   }
 
-  function handleCancelEdit() {
-    setEditingId(null);
-    setForm((prev) => ({
+  function closeEditModal() {
+    setEditModalOpen(false);
+    setSavingEdit(false);
+    setEditForm((prev) => ({
       ...prev,
+      id: '',
       date: '',
       period: 'ALL_DAY',
       scope: 'ALL',
@@ -645,6 +673,41 @@ function BlockReservationsPanel() {
     }));
   }
 
+  // ---------- SALVAR EDIÇÃO (MODAL) ----------
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editForm.id || savingEdit) return;
+
+    try {
+      setSavingEdit(true);
+
+      if (!editForm.date || !/^\d{4}-\d{2}-\d{2}$/.test(editForm.date)) {
+        toast.error('Data inválida.');
+        return;
+      }
+
+      const payload: any = {
+        unitId: editForm.unitId,
+        date: editForm.date,
+        period: editForm.period,
+        reason: editForm.reason || null,
+        areaId: editForm.scope === 'ALL' ? null : editForm.areaId || null,
+      };
+
+      await updateBlock(editForm.id, payload);
+      toast.success('Bloqueio atualizado com sucesso.');
+
+      await loadBlocks();
+      closeEditModal();
+    } catch (e: any) {
+      const msg = e?.error?.message || e?.message || 'Erro ao atualizar bloqueio.';
+      toast.error(msg);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  // ---------- EXCLUIR BLOQUEIO ----------
   async function handleDelete(id: string) {
     if (!id) return;
 
@@ -656,9 +719,6 @@ function BlockReservationsPanel() {
       await deleteBlock(id);
       toast.success('Bloqueio removido com sucesso.');
       setBlocks((prev) => prev.filter((b) => b.id !== id));
-      if (editingId === id) {
-        handleCancelEdit();
-      }
     } catch (e: any) {
       const msg = e?.error?.message || e?.message || 'Erro ao excluir bloqueio.';
       toast.error(msg);
@@ -678,7 +738,7 @@ function BlockReservationsPanel() {
           </p>
         </div>
 
-        {/* FORM - cria ou atualiza */}
+        {/* FORM - Criar NOVO bloqueio */}
         <form
           onSubmit={handleSave}
           className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl"
@@ -776,41 +836,18 @@ function BlockReservationsPanel() {
             />
           </label>
 
-          <div className="md:col-span-2 flex justify-between items-center mt-2">
-            {editingId && (
-              <span className="text-xs text-muted">
-                Editando bloqueio <code>{editingId.slice(0, 8)}…</code>
-              </span>
-            )}
-            <div className="ml-auto flex gap-2">
-              {editingId && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={handleCancelEdit}
-                  disabled={saving}
-                >
-                  Cancelar edição
-                </button>
-              )}
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={!canSubmit || saving}
-              >
-                {saving
-                  ? editingId
-                    ? 'Salvando…'
-                    : 'Criando…'
-                  : editingId
-                  ? 'Salvar alterações'
-                  : 'Criar bloqueio'}
-              </button>
-            </div>
+          <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={!canSubmit || saving}
+            >
+              {saving ? 'Criando…' : 'Criar bloqueio'}
+            </button>
           </div>
         </form>
 
-        {/* LISTAGEM + Ações */}
+        {/* LISTAGEM + AÇÕES */}
         <div className="mt-6">
           <h3 className="font-semibold mb-2 text-sm">Bloqueios cadastrados</h3>
 
@@ -860,8 +897,8 @@ function BlockReservationsPanel() {
                             <button
                               type="button"
                               className="text-xs underline"
-                              onClick={() => handleEdit(b)}
-                              disabled={saving || deletingId === b.id}
+                              onClick={() => openEditModal(b)}
+                              disabled={savingEdit || deletingId === b.id}
                             >
                               Editar
                             </button>
@@ -901,10 +938,151 @@ function BlockReservationsPanel() {
           </p>
         </div>
       </div>
+
+      {/* ---------- MODAL DE EDIÇÃO ---------- */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-lg mx-4 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-lg">Editar bloqueio</h3>
+              <button
+                type="button"
+                className="text-sm text-muted hover:text-foreground"
+                onClick={closeEditModal}
+                disabled={savingEdit}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleEditSave}
+              className="grid grid-cols-1 md:grid-cols-2 gap-3"
+            >
+              <label>
+                <span>Unidade*</span>
+                <select
+                  className="input py-2"
+                  value={editForm.unitId}
+                  onChange={(e) => setEditField('unitId', e.target.value)}
+                  disabled={loadingUnits || savingEdit}
+                >
+                  <option value="">
+                    {loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}
+                  </option>
+                  {(units as any[]).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Escopo do bloqueio*</span>
+                <select
+                  className="input py-2"
+                  value={editForm.scope}
+                  onChange={(e) =>
+                    setEditField('scope', e.target.value as 'ALL' | 'AREA')
+                  }
+                  disabled={savingEdit}
+                >
+                  <option value="ALL">Todas as áreas da unidade</option>
+                  <option value="AREA">Apenas uma área específica</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Área</span>
+                <select
+                  className="input py-2"
+                  value={editForm.areaId}
+                  onChange={(e) => setEditField('areaId', e.target.value)}
+                  disabled={
+                    editForm.scope === 'ALL' ||
+                    !editForm.unitId ||
+                    editAreasByUnit.loading ||
+                    savingEdit
+                  }
+                >
+                  <option value="">
+                    {!editForm.unitId
+                      ? 'Selecione a unidade primeiro'
+                      : editAreasByUnit.loading
+                      ? 'Carregando áreas...'
+                      : 'Selecione a área'}
+                  </option>
+                  {(editAreasByUnit.data ?? []).map((a: any) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Data*</span>
+                <input
+                  type="date"
+                  className="input py-2"
+                  value={editForm.date}
+                  onChange={(e) => setEditField('date', e.target.value)}
+                  disabled={savingEdit}
+                />
+              </label>
+
+              <label>
+                <span>Período*</span>
+                <select
+                  className="input py-2"
+                  value={editForm.period}
+                  onChange={(e) =>
+                    setEditField('period', e.target.value as 'ALL_DAY' | 'AFTERNOON' | 'NIGHT')
+                  }
+                  disabled={savingEdit}
+                >
+                  <option value="ALL_DAY">Dia todo</option>
+                  <option value="AFTERNOON">Somente tarde</option>
+                  <option value="NIGHT">Somente noite</option>
+                </select>
+              </label>
+
+              <label className="md:col-span-2">
+                <span>Motivo</span>
+                <input
+                  className="input py-2"
+                  placeholder="Motivo do bloqueio"
+                  value={editForm.reason}
+                  onChange={(e) => setEditField('reason', e.target.value)}
+                  disabled={savingEdit}
+                />
+              </label>
+
+              <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={closeEditModal}
+                  disabled={savingEdit}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingEdit || !editForm.id}
+                >
+                  {savingEdit ? 'Salvando…' : 'Salvar alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
-
 
 /* ---------- Tabela de Reservas (ajustada) ---------- */
 function ReservationsTable({
