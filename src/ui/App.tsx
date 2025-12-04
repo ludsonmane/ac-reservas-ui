@@ -15,7 +15,8 @@ import AreasPage from './AreasPage';
 import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
-import { createBlock } from './hooks/useBlocks';
+import { createBlock, updateBlock, deleteBlock } from './hooks/useBlocks';
+
 
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
@@ -474,7 +475,6 @@ function reservationTypeLabel(raw?: string | null) {
 }
 
 /* ---------- Painel: Bloquear Reservas ---------- */
-/* ---------- Painel: Bloquear Reservas ---------- */
 function BlockReservationsPanel() {
   const [form, setForm] = useState<{
     unitId: string;
@@ -493,10 +493,10 @@ function BlockReservationsPanel() {
   });
 
   const [saving, setSaving] = useState(false);
-
-  // <<< NOVO: estado para listagem de bloqueios >>>
   const [blocks, setBlocks] = useState<any[]>([]);
   const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { units, loading: loadingUnits } = useUnits(true);
   const areasByUnit = useAreasByUnit(form.unitId || undefined, !!form.unitId);
@@ -511,8 +511,7 @@ function BlockReservationsPanel() {
     !!form.period &&
     (form.scope === 'ALL' || !!form.areaId);
 
-  // helper de formatação de data (aceita ISO ou yyyy-mm-dd)
-  function formatDateStr(value: string | undefined) {
+  function formatDateStr(value?: string | null) {
     if (!value) return '—';
     const iso = value.includes('T') ? value : `${value}T00:00:00`;
     const d = new Date(iso);
@@ -520,8 +519,8 @@ function BlockReservationsPanel() {
     return d.toLocaleDateString('pt-BR');
   }
 
-  function formatPeriod(period: string | undefined) {
-    switch (period) {
+  function formatPeriod(value?: string | null) {
+    switch (value) {
       case 'ALL_DAY':
         return 'Dia todo';
       case 'AFTERNOON':
@@ -529,11 +528,10 @@ function BlockReservationsPanel() {
       case 'NIGHT':
         return 'Noite';
       default:
-        return period || '—';
+        return value || '—';
     }
   }
 
-  // <<< NOVO: carregar bloqueios existentes >>>
   async function loadBlocks() {
     try {
       setLoadingBlocks(true);
@@ -546,12 +544,16 @@ function BlockReservationsPanel() {
 
       const res = await api(url, { auth: true });
 
-      // aceita tanto array direto quanto { items: [...] } / { data: [...] }
       const items =
         Array.isArray(res) ? res : (res?.items as any[]) || (res?.data as any[]) || [];
 
       setBlocks(items);
     } catch (e: any) {
+      if (e?.status === 404 || e?.error === 'NOT_FOUND') {
+        console.warn('Rota GET /v1/blocks/period não encontrada na API.');
+        setBlocks([]);
+        return;
+      }
       console.error(e);
       toast.error(e?.message || 'Erro ao carregar bloqueios.');
     } finally {
@@ -559,13 +561,11 @@ function BlockReservationsPanel() {
     }
   }
 
-  // carrega na entrada da tela e quando mudar a unidade
   useEffect(() => {
     loadBlocks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.unitId]);
 
-  // <<< handleSave usando createBlock + reload da lista >>>
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit || saving) return;
@@ -573,22 +573,26 @@ function BlockReservationsPanel() {
     try {
       setSaving(true);
 
-      // form.date vem em YYYY-MM-DD do input
       if (!form.date || !/^\d{4}-\d{2}-\d{2}$/.test(form.date)) {
         toast.error('Data inválida.');
-        setSaving(false);
         return;
       }
 
-      await createBlock({
+      const payload = {
         unitId: form.unitId,
-        date: form.date, // YYYY-MM-DD
+        date: form.date,
         period: form.period,
         reason: form.reason || 'Bloqueio criado pelo admin.',
         areaId: form.scope === 'ALL' ? null : form.areaId || null,
-      });
+      };
 
-      toast.success('Bloqueio criado com sucesso.');
+      if (editingId) {
+        await updateBlock(editingId, payload);
+        toast.success('Bloqueio atualizado com sucesso.');
+      } else {
+        await createBlock(payload);
+        toast.success('Bloqueio criado com sucesso.');
+      }
 
       setForm((prev) => ({
         ...prev,
@@ -598,14 +602,68 @@ function BlockReservationsPanel() {
         areaId: '',
         reason: '',
       }));
+      setEditingId(null);
 
-      // recarrega lista depois de salvar
       await loadBlocks();
     } catch (e: any) {
-      const msg = e?.error?.message || e?.message || 'Erro ao criar bloqueio.';
+      const msg = e?.error?.message || e?.message || 'Erro ao salvar bloqueio.';
       toast.error(msg);
     } finally {
       setSaving(false);
+    }
+  }
+
+  function handleEdit(block: any) {
+    const rawDate = block.date || block.blockDate;
+    const dateStr =
+      typeof rawDate === 'string'
+        ? rawDate.slice(0, 10)
+        : rawDate instanceof Date
+        ? rawDate.toISOString().slice(0, 10)
+        : '';
+
+    setForm({
+      unitId: block.unitId,
+      date: dateStr,
+      period: (block.period || block.blockPeriod || 'ALL_DAY') as any,
+      scope: block.areaId ? 'AREA' : 'ALL',
+      areaId: block.areaId || '',
+      reason: block.reason || '',
+    });
+    setEditingId(block.id);
+  }
+
+  function handleCancelEdit() {
+    setEditingId(null);
+    setForm((prev) => ({
+      ...prev,
+      date: '',
+      period: 'ALL_DAY',
+      scope: 'ALL',
+      areaId: '',
+      reason: '',
+    }));
+  }
+
+  async function handleDelete(id: string) {
+    if (!id) return;
+
+    const confirmed = window.confirm('Tem certeza que deseja excluir este bloqueio?');
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(id);
+      await deleteBlock(id);
+      toast.success('Bloqueio removido com sucesso.');
+      setBlocks((prev) => prev.filter((b) => b.id !== id));
+      if (editingId === id) {
+        handleCancelEdit();
+      }
+    } catch (e: any) {
+      const msg = e?.error?.message || e?.message || 'Erro ao excluir bloqueio.';
+      toast.error(msg);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -620,7 +678,7 @@ function BlockReservationsPanel() {
           </p>
         </div>
 
-        {/* FORMULÁRIO DE CRIAÇÃO */}
+        {/* FORM - cria ou atualiza */}
         <form
           onSubmit={handleSave}
           className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl"
@@ -663,14 +721,16 @@ function BlockReservationsPanel() {
               className="input py-2"
               value={form.areaId}
               onChange={(e) => setField('areaId', e.target.value)}
-              disabled={form.scope === 'ALL' || !form.unitId || areasByUnit.loading || saving}
+              disabled={
+                form.scope === 'ALL' || !form.unitId || areasByUnit.loading || saving
+              }
             >
               <option value="">
                 {!form.unitId
                   ? 'Selecione a unidade primeiro'
                   : areasByUnit.loading
-                    ? 'Carregando áreas...'
-                    : 'Selecione a área'}
+                  ? 'Carregando áreas...'
+                  : 'Selecione a área'}
               </option>
               {(areasByUnit.data ?? []).map((a: any) => (
                 <option key={a.id} value={a.id}>
@@ -716,18 +776,41 @@ function BlockReservationsPanel() {
             />
           </label>
 
-          <div className="md:col-span-2 flex justify-end gap-2 mt-2">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!canSubmit || saving}
-            >
-              {saving ? 'Salvando…' : 'Criar bloqueio'}
-            </button>
+          <div className="md:col-span-2 flex justify-between items-center mt-2">
+            {editingId && (
+              <span className="text-xs text-muted">
+                Editando bloqueio <code>{editingId.slice(0, 8)}…</code>
+              </span>
+            )}
+            <div className="ml-auto flex gap-2">
+              {editingId && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                >
+                  Cancelar edição
+                </button>
+              )}
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!canSubmit || saving}
+              >
+                {saving
+                  ? editingId
+                    ? 'Salvando…'
+                    : 'Criando…'
+                  : editingId
+                  ? 'Salvar alterações'
+                  : 'Criar bloqueio'}
+              </button>
+            </div>
           </div>
         </form>
 
-        {/* <<< NOVO: LISTA DE BLOQUEIOS EXISTENTES >>> */}
+        {/* LISTAGEM + Ações */}
         <div className="mt-6">
           <h3 className="font-semibold mb-2 text-sm">Bloqueios cadastrados</h3>
 
@@ -739,7 +822,7 @@ function BlockReservationsPanel() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse min-w-[520px]">
+              <table className="w-full text-sm border-collapse min-w-[620px]">
                 <thead>
                   <tr className="border-b border-border text-left">
                     <th className="py-1 pr-2">Data</th>
@@ -747,15 +830,13 @@ function BlockReservationsPanel() {
                     <th className="py-1 px-2">Unidade</th>
                     <th className="py-1 px-2">Área</th>
                     <th className="py-1 px-2">Motivo</th>
+                    <th className="py-1 px-2 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {blocks.map((b: any) => (
                     <tr
-                      key={
-                        b.id ??
-                        `${b.unitId}-${b.date}-${b.period}-${b.areaId || 'ALL'}`
-                      }
+                      key={b.id ?? `${b.unitId}-${b.date}-${b.period}-${b.areaId || 'ALL'}`}
                       className="border-b border-border/60"
                     >
                       <td className="py-1 pr-2">
@@ -770,8 +851,32 @@ function BlockReservationsPanel() {
                       <td className="py-1 px-2">
                         {b.areaName ?? (b.areaId ? b.areaId : 'Todas')}
                       </td>
-                      <td className="py-1 px-2">
+                      <td className="py-1 px-2 max-w-xs truncate" title={b.reason ?? ''}>
                         {b.reason ?? '—'}
+                      </td>
+                      <td className="py-1 px-2 text-right">
+                        {b.id ? (
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              type="button"
+                              className="text-xs underline"
+                              onClick={() => handleEdit(b)}
+                              disabled={saving || deletingId === b.id}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs underline text-red-600 disabled:opacity-50"
+                              onClick={() => handleDelete(b.id)}
+                              disabled={deletingId === b.id}
+                            >
+                              {deletingId === b.id ? 'Removendo…' : 'Excluir'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -781,7 +886,6 @@ function BlockReservationsPanel() {
           )}
         </div>
 
-        {/* Texto explicativo */}
         <div className="mt-4 text-xs text-muted max-w-3xl">
           <p className="mb-1">
             • <b>Dia todo</b> cria um bloqueio com período <code>ALL_DAY</code>, impedindo
@@ -793,7 +897,7 @@ function BlockReservationsPanel() {
           </p>
           <p>
             • Quando você seleciona &quot;Todas as áreas da unidade&quot;, o bloqueio vale
-            para o Mané inteiro naquela unidade.
+            para todas as áreas daquela unidade.
           </p>
         </div>
       </div>
