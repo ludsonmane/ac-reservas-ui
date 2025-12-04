@@ -895,27 +895,28 @@ function BlockReservationsPanel() {
                       <td className="py-1 px-2 text-right">
                         {b.id ? (
                           <div className="flex gap-2 justify-end">
-                            <button
-                              type="button"
-                              className="text-xs underline"
+                            <IconBtn
+                              title="Editar bloqueio"
                               onClick={() => openEditModal(b)}
                               disabled={savingEdit || deletingId === b.id}
                             >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs underline text-red-600 disabled:opacity-50"
+                              <PencilIcon />
+                            </IconBtn>
+
+                            <IconBtn
+                              title={deletingId === b.id ? 'Removendo…' : 'Excluir bloqueio'}
+                              danger
                               onClick={() => handleDelete(b.id)}
                               disabled={deletingId === b.id}
                             >
-                              {deletingId === b.id ? 'Removendo…' : 'Excluir'}
-                            </button>
+                              <TrashIcon />
+                            </IconBtn>
                           </div>
                         ) : (
                           <span className="text-xs text-muted">—</span>
                         )}
                       </td>
+
                     </tr>
                   ))}
                 </tbody>
