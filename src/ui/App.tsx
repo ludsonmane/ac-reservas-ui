@@ -474,6 +474,7 @@ function reservationTypeLabel(raw?: string | null) {
 }
 
 /* ---------- Painel: Bloquear Reservas ---------- */
+/* ---------- Painel: Bloquear Reservas ---------- */
 function BlockReservationsPanel() {
   const [form, setForm] = useState<{
     unitId: string;
@@ -493,6 +494,10 @@ function BlockReservationsPanel() {
 
   const [saving, setSaving] = useState(false);
 
+  // <<< NOVO: estado para listagem de bloqueios >>>
+  const [blocks, setBlocks] = useState<any[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+
   const { units, loading: loadingUnits } = useUnits(true);
   const areasByUnit = useAreasByUnit(form.unitId || undefined, !!form.unitId);
 
@@ -506,6 +511,61 @@ function BlockReservationsPanel() {
     !!form.period &&
     (form.scope === 'ALL' || !!form.areaId);
 
+  // helper de formatação de data (aceita ISO ou yyyy-mm-dd)
+  function formatDateStr(value: string | undefined) {
+    if (!value) return '—';
+    const iso = value.includes('T') ? value : `${value}T00:00:00`;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString('pt-BR');
+  }
+
+  function formatPeriod(period: string | undefined) {
+    switch (period) {
+      case 'ALL_DAY':
+        return 'Dia todo';
+      case 'AFTERNOON':
+        return 'Tarde';
+      case 'NIGHT':
+        return 'Noite';
+      default:
+        return period || '—';
+    }
+  }
+
+  // <<< NOVO: carregar bloqueios existentes >>>
+  async function loadBlocks() {
+    try {
+      setLoadingBlocks(true);
+
+      const params: Record<string, string> = {};
+      if (form.unitId) params.unitId = form.unitId;
+
+      const qs = new URLSearchParams(params).toString();
+      const url = `/v1/blocks/period${qs ? `?${qs}` : ''}`;
+
+      const res = await api(url, { auth: true });
+
+      // aceita tanto array direto quanto { items: [...] } / { data: [...] }
+      const items =
+        Array.isArray(res) ? res : (res?.items as any[]) || (res?.data as any[]) || [];
+
+      setBlocks(items);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Erro ao carregar bloqueios.');
+    } finally {
+      setLoadingBlocks(false);
+    }
+  }
+
+  // carrega na entrada da tela e quando mudar a unidade
+  useEffect(() => {
+    loadBlocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.unitId]);
+
+  // <<< handleSave usando createBlock + reload da lista >>>
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit || saving) return;
@@ -513,9 +573,8 @@ function BlockReservationsPanel() {
     try {
       setSaving(true);
 
-      // data já vem em YYYY-MM-DD do input; ainda assim validamos rapidamente
-      const d = new Date(`${form.date}T00:00:00`);
-      if (Number.isNaN(d.getTime())) {
+      // form.date vem em YYYY-MM-DD do input
+      if (!form.date || !/^\d{4}-\d{2}-\d{2}$/.test(form.date)) {
         toast.error('Data inválida.');
         setSaving(false);
         return;
@@ -524,12 +583,13 @@ function BlockReservationsPanel() {
       await createBlock({
         unitId: form.unitId,
         date: form.date, // YYYY-MM-DD
-        period: form.period, // 'ALL_DAY' | 'AFTERNOON' | 'NIGHT'
+        period: form.period,
         reason: form.reason || 'Bloqueio criado pelo admin.',
         areaId: form.scope === 'ALL' ? null : form.areaId || null,
       });
 
       toast.success('Bloqueio criado com sucesso.');
+
       setForm((prev) => ({
         ...prev,
         date: '',
@@ -538,6 +598,9 @@ function BlockReservationsPanel() {
         areaId: '',
         reason: '',
       }));
+
+      // recarrega lista depois de salvar
+      await loadBlocks();
     } catch (e: any) {
       const msg = e?.error?.message || e?.message || 'Erro ao criar bloqueio.';
       toast.error(msg);
@@ -545,6 +608,7 @@ function BlockReservationsPanel() {
       setSaving(false);
     }
   }
+
   return (
     <section className="container mt-4">
       <div className="card">
@@ -556,22 +620,62 @@ function BlockReservationsPanel() {
           </p>
         </div>
 
-        <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl">
+        {/* FORMULÁRIO DE CRIAÇÃO */}
+        <form
+          onSubmit={handleSave}
+          className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl"
+        >
           <label>
             <span>Unidade*</span>
             <select
               className="input py-2"
               value={form.unitId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setField('unitId', v);
-                setField('areaId', '');
-              }}
+              onChange={(e) => setField('unitId', e.target.value)}
               disabled={loadingUnits || saving}
             >
-              <option value="">{loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}</option>
+              <option value="">
+                {loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}
+              </option>
               {(units as any[]).map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Escopo do bloqueio*</span>
+            <select
+              className="input py-2"
+              value={form.scope}
+              onChange={(e) => setField('scope', e.target.value as any)}
+              disabled={saving}
+            >
+              <option value="ALL">Todas as áreas da unidade</option>
+              <option value="AREA">Apenas uma área específica</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Área</span>
+            <select
+              className="input py-2"
+              value={form.areaId}
+              onChange={(e) => setField('areaId', e.target.value)}
+              disabled={form.scope === 'ALL' || !form.unitId || areasByUnit.loading || saving}
+            >
+              <option value="">
+                {!form.unitId
+                  ? 'Selecione a unidade primeiro'
+                  : areasByUnit.loading
+                    ? 'Carregando áreas...'
+                    : 'Selecione a área'}
+              </option>
+              {(areasByUnit.data ?? []).map((a: any) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
               ))}
             </select>
           </label>
@@ -601,40 +705,6 @@ function BlockReservationsPanel() {
             </select>
           </label>
 
-          <label>
-            <span>Escopo*</span>
-            <select
-              className="input py-2"
-              value={form.scope}
-              onChange={(e) => setField('scope', e.target.value as any)}
-              disabled={saving || !form.unitId}
-            >
-              <option value="ALL">Todas as áreas da unidade</option>
-              <option value="AREA">Apenas uma área específica</option>
-            </select>
-          </label>
-
-          <label className={form.scope === 'AREA' ? '' : 'opacity-60'}>
-            <span>Área {form.scope === 'AREA' ? '*' : '(opcional)'}</span>
-            <select
-              className="input py-2"
-              value={form.areaId}
-              onChange={(e) => setField('areaId', e.target.value)}
-              disabled={saving || !form.unitId || form.scope !== 'AREA' || areasByUnit.loading}
-            >
-              <option value="">
-                {!form.unitId
-                  ? 'Selecione uma unidade'
-                  : areasByUnit.loading
-                    ? 'Carregando áreas...'
-                    : 'Selecione a área'}
-              </option>
-              {areasByUnit.data?.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </label>
-
           <label className="md:col-span-2">
             <span>Motivo</span>
             <input
@@ -657,23 +727,80 @@ function BlockReservationsPanel() {
           </div>
         </form>
 
+        {/* <<< NOVO: LISTA DE BLOQUEIOS EXISTENTES >>> */}
+        <div className="mt-6">
+          <h3 className="font-semibold mb-2 text-sm">Bloqueios cadastrados</h3>
+
+          {loadingBlocks ? (
+            <p className="text-sm text-muted">Carregando bloqueios…</p>
+          ) : blocks.length === 0 ? (
+            <p className="text-sm text-muted">
+              Nenhum bloqueio cadastrado ainda para o filtro atual.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse min-w-[520px]">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="py-1 pr-2">Data</th>
+                    <th className="py-1 px-2">Período</th>
+                    <th className="py-1 px-2">Unidade</th>
+                    <th className="py-1 px-2">Área</th>
+                    <th className="py-1 px-2">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blocks.map((b: any) => (
+                    <tr
+                      key={
+                        b.id ??
+                        `${b.unitId}-${b.date}-${b.period}-${b.areaId || 'ALL'}`
+                      }
+                      className="border-b border-border/60"
+                    >
+                      <td className="py-1 pr-2">
+                        {formatDateStr(b.date ?? b.blockDate)}
+                      </td>
+                      <td className="py-1 px-2">
+                        {formatPeriod(b.period ?? b.blockPeriod)}
+                      </td>
+                      <td className="py-1 px-2">
+                        {b.unitName ?? b.unitId ?? '—'}
+                      </td>
+                      <td className="py-1 px-2">
+                        {b.areaName ?? (b.areaId ? b.areaId : 'Todas')}
+                      </td>
+                      <td className="py-1 px-2">
+                        {b.reason ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Texto explicativo */}
         <div className="mt-4 text-xs text-muted max-w-3xl">
           <p className="mb-1">
-            • <b>Dia todo</b> cria um bloqueio com período <code>ALL_DAY</code>, impedindo reservas em
-            todos os horários da data escolhida.
+            • <b>Dia todo</b> cria um bloqueio com período <code>ALL_DAY</code>, impedindo
+            reservas em todos os horários da data escolhida.
           </p>
           <p className="mb-1">
-            • <b>Somente tarde</b> e <b>Somente noite</b> criam bloqueios específicos por período, respeitando
-            a lógica de capacidades de tarde/noite.
+            • <b>Somente tarde</b> e <b>Somente noite</b> criam bloqueios específicos por
+            período, respeitando a lógica de capacidades de tarde/noite.
           </p>
           <p>
-            • Quando você seleciona &quot;Todas as áreas da unidade&quot;, o bloqueio vale para o Mané inteiro.
+            • Quando você seleciona &quot;Todas as áreas da unidade&quot;, o bloqueio vale
+            para o Mané inteiro naquela unidade.
           </p>
         </div>
       </div>
     </section>
   );
 }
+
 
 /* ---------- Tabela de Reservas (ajustada) ---------- */
 function ReservationsTable({
