@@ -18,6 +18,7 @@ import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analyti
 import { createBlock, updateBlock, deleteBlock } from './hooks/useBlocks';
 
 
+
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
   const d = new Date(iso);
@@ -643,8 +644,8 @@ function BlockReservationsPanel() {
       typeof rawDate === 'string'
         ? rawDate.slice(0, 10)
         : rawDate instanceof Date
-        ? rawDate.toISOString().slice(0, 10)
-        : '';
+          ? rawDate.toISOString().slice(0, 10)
+          : '';
 
     setEditForm({
       id: block.id,
@@ -789,8 +790,8 @@ function BlockReservationsPanel() {
                 {!form.unitId
                   ? 'Selecione a unidade primeiro'
                   : areasByUnit.loading
-                  ? 'Carregando áreas...'
-                  : 'Selecione a área'}
+                    ? 'Carregando áreas...'
+                    : 'Selecione a área'}
               </option>
               {(areasByUnit.data ?? []).map((a: any) => (
                 <option key={a.id} value={a.id}>
@@ -1010,8 +1011,8 @@ function BlockReservationsPanel() {
                     {!editForm.unitId
                       ? 'Selecione a unidade primeiro'
                       : editAreasByUnit.loading
-                      ? 'Carregando áreas...'
-                      : 'Selecione a área'}
+                        ? 'Carregando áreas...'
+                        : 'Selecione a área'}
                   </option>
                   {(editAreasByUnit.data ?? []).map((a: any) => (
                     <option key={a.id} value={a.id}>
