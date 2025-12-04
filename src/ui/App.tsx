@@ -15,6 +15,7 @@ import AreasPage from './AreasPage';
 import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
+import { createBlock } from './hooks/useBlocks';
 
 /* ---------- helpers de data ---------- */
 function toLocalInput(iso: string) {
@@ -512,7 +513,7 @@ function BlockReservationsPanel() {
     try {
       setSaving(true);
 
-      // monta data em ISO (inicio do dia)
+      // data já vem em YYYY-MM-DD do input; ainda assim validamos rapidamente
       const d = new Date(`${form.date}T00:00:00`);
       if (Number.isNaN(d.getTime())) {
         toast.error('Data inválida.');
@@ -520,21 +521,12 @@ function BlockReservationsPanel() {
         return;
       }
 
-      const payload: any = {
+      await createBlock({
         unitId: form.unitId,
-        // se for "todas as áreas", manda null
-        areaId: form.scope === 'ALL' ? null : form.areaId || null,
-        date: d.toISOString(),
-        mode: 'PERIOD',           // usamos sempre PERIOD
-        period: form.period,      // 'ALL_DAY' | 'AFTERNOON' | 'NIGHT'
-        slots: null,
+        date: form.date, // YYYY-MM-DD
+        period: form.period, // 'ALL_DAY' | 'AFTERNOON' | 'NIGHT'
         reason: form.reason || 'Bloqueio criado pelo admin.',
-      };
-
-      await api('/v1/admin/blocks', {
-        method: 'POST',
-        body: payload,
-        auth: true,
+        areaId: form.scope === 'ALL' ? null : form.areaId || null,
       });
 
       toast.success('Bloqueio criado com sucesso.');
@@ -553,7 +545,6 @@ function BlockReservationsPanel() {
       setSaving(false);
     }
   }
-
   return (
     <section className="container mt-4">
       <div className="card">
