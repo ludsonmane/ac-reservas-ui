@@ -15,13 +15,13 @@ export async function createBlock(params: {
   return api('/v1/blocks/period', {
     method: 'POST',
     auth: true,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    // aqui a gente passa um OBJETO normal, sem JSON.stringify
+    body: {
       unitId,
       date,
       period,
       reason,
       areaId,
-    }),
+    },
   });
 }
