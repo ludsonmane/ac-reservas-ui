@@ -15,6 +15,7 @@ import AreasPage from './AreasPage';
 import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import DashboardPage from './DashboardPage';
+import LogsPage from './LogsPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 import { createBlock, updateBlock, deleteBlock } from './hooks/useBlocks';
 
@@ -2037,7 +2038,7 @@ function IconBtn({
 export default function App() {
   const { token, user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
-  const [tab, setTab] = useState<'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios'>('reservas');
+  const [tab, setTab] = useState<'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs'>('reservas');
 
   const isCheckinRoute = typeof window !== 'undefined' && window.location.pathname.includes('/checkin');
 
@@ -2124,6 +2125,8 @@ export default function App() {
                 <UnitsPage />
               ) : tab === 'areas' ? (
                 <AreasPage />
+              ) : tab === 'logs' ? (
+                <LogsPage />
               ) : (
                 <UsersPage />
               )}
@@ -2141,12 +2144,12 @@ function NavTabs({
   onChange,
   isAdmin,
 }: {
-  active: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
-  onChange: (t: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios') => void;
+  active: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs';
+  onChange: (t: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs') => void;
   isAdmin: boolean;
 }) {
   const items: Array<{
-    key: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
+    key: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs';
     label: string;
     icon: React.ReactNode;
     adminOnly?: boolean;
@@ -2218,6 +2221,20 @@ function NavTabs({
             <circle cx="9" cy="7" r="4" />
             <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        ),
+      },
+      {
+        key: 'logs',
+        label: 'Logs',
+        adminOnly: true,
+        icon: (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
           </svg>
         ),
       },
