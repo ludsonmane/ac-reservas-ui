@@ -14,6 +14,7 @@ import { useAreasByUnit } from './hooks/useAreasByUnit';
 import AreasPage from './AreasPage';
 import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
+import DashboardPage from './DashboardPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 import { createBlock, updateBlock, deleteBlock } from './hooks/useBlocks';
 
@@ -225,6 +226,11 @@ const RefreshIcon = () => (
 const TrashIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" role="img" aria-hidden="true" className="block">
     <path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" />
+  </svg>
+);
+const NoShowIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-hidden="true" className="block">
+    <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6" /><path d="M9 9l6 6" />
   </svg>
 );
 
@@ -1272,6 +1278,26 @@ function ReservationsTable({
 
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
   const [qrBust, setQrBust] = React.useState<number>(0);
+  const [noShowLoading, setNoShowLoading] = React.useState<string | null>(null);
+
+  async function handleNoShow(r: Reservation) {
+    if (noShowLoading) return;
+    try {
+      setNoShowLoading(r.id);
+      const res = await api(`/v1/reservations/${r.id}/noshow`, { method: 'POST', auth: true });
+      if (res.status === 'NO_SHOW') {
+        toast.success('Marcado como No Show');
+      } else {
+        toast.success('Desmarcado No Show');
+      }
+      // Força refresh da lista
+      setFilters({ ...filters });
+    } catch (e: any) {
+      toast.error(e?.error || 'Erro ao atualizar status');
+    } finally {
+      setNoShowLoading(null);
+    }
+  }
 
   function isToday(iso?: string | null) {
     if (!iso) return false;
@@ -1344,7 +1370,8 @@ function ReservationsTable({
           {!loading && (
             <tbody>
               {data.items.map((r: Reservation) => {
-                const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : 'badge-wait';
+                const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : r.status === 'NO_SHOW' ? 'badge-noshow' : 'badge-wait';
+                const isNoShow = r.status === 'NO_SHOW';
                 const when = new Date(r.reservationDate).toLocaleString();
 
                 const unitLabel =
@@ -1452,6 +1479,20 @@ function ReservationsTable({
                     {/* Ações */}
                     <td className="px-3 py-2 text-right align-top">
                       <div className="flex gap-2 justify-end">
+                        <IconBtn 
+                          title={isNoShow ? "Desmarcar No Show" : "Marcar No Show"} 
+                          danger={!isNoShow}
+                          onClick={() => handleNoShow(r)}
+                          disabled={noShowLoading === r.id || r.status === 'CHECKED_IN'}
+                        >
+                          {isNoShow ? (
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-hidden="true" className="block">
+                              <path d="M3 12l5 5L21 6" />
+                            </svg>
+                          ) : (
+                            <NoShowIcon />
+                          )}
+                        </IconBtn>
                         <IconBtn title="Editar" onClick={() => setFilters({ ...filters, showModal: true, editing: r })}><PencilIcon /></IconBtn>
                         <IconBtn title="Renovar QR" onClick={() => setRenewTarget(r)}><RefreshIcon /></IconBtn>
                         <IconBtn title="Excluir" danger onClick={() => onAskDelete(r)}><TrashIcon /></IconBtn>
@@ -1598,8 +1639,6 @@ function FiltersBar({ value, onChange }: { value: any; onChange: (v: any) => voi
       </div>
 
       <div className="flex gap-2">
-        <button className="btn" onClick={() => onChange({ ...value })}>Atualizar</button>
-
         {/* Botão Exportar Excel (verde) */}
         <button
           className="btn btn-primary text-white"
@@ -1702,9 +1741,9 @@ function ReservationModal({
       unitId: form.unitId || null,
       areaId: form.areaId || null,
 
-      utm_source: form.utm_source || null,
+      utm_source: form.utm_source || "Manual",
       utm_campaign: form.utm_campaign || null,
-      source: form.source || null,
+      source: form.utm_source || "Manual",
     };
 
     if (editing && !isAdmin) {
@@ -1883,7 +1922,7 @@ function ReservationsPanel() {
       unitId: filters.unitId || undefined,
       unitSlug: filters.unitSlug || undefined,
       areaId: filters.areaId || undefined,
-      q: (searchDebounced || undefined) as string | undefined,
+      search: (searchDebounced || undefined) as string | undefined,
       from: localToISOStart(filters.from),
       to: localToISOEnd(filters.to),
     };
@@ -1988,7 +2027,7 @@ function IconBtn({
 export default function App() {
   const { token, user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
-  const [tab, setTab] = useState<'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios'>('reservas');
+  const [tab, setTab] = useState<'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios'>('reservas');
 
   const isCheckinRoute = typeof window !== 'undefined' && window.location.pathname.includes('/checkin');
 
@@ -2065,7 +2104,9 @@ export default function App() {
           ) : (
             <>
               <NavTabs active={tab} onChange={setTab} isAdmin={isAdmin} />
-              {tab === 'reservas' ? (
+              {tab === 'dashboard' ? (
+                <DashboardPage />
+              ) : tab === 'reservas' ? (
                 <ReservationsPanel />
               ) : tab === 'bloqueios' ? (
                 <BlockReservationsPanel />
@@ -2090,16 +2131,28 @@ function NavTabs({
   onChange,
   isAdmin,
 }: {
-  active: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
-  onChange: (t: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios') => void;
+  active: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
+  onChange: (t: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios') => void;
   isAdmin: boolean;
 }) {
   const items: Array<{
-    key: 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
+    key: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios';
     label: string;
     icon: React.ReactNode;
     adminOnly?: boolean;
   }> = [
+      {
+        key: 'dashboard',
+        label: 'Dashboard',
+        icon: (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 3v18h18" />
+            <path d="M7 15v3" />
+            <path d="M12 11v7" />
+            <path d="M17 7v11" />
+          </svg>
+        ),
+      },
       {
         key: 'reservas',
         label: 'Reservas',

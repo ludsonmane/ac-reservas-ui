@@ -49,6 +49,7 @@ label > span { @apply block text-sm text-muted mb-1; }
 .badge { @apply px-2 py-0.5 rounded-full border text-muted border-border text-xs; }
 .badge-ok { @apply text-[#0f766e] border-[#0f766e]; }
 .badge-wait { @apply text-[#a16207] border-[#f59e0b]; }
+.badge-noshow { @apply text-[#dc2626] border-[#dc2626] bg-red-50; }
 
 /* --------- Barra de progresso --------- */
 .progress { @apply h-2 rounded-full bg-[#e8f5ea] overflow-hidden; }

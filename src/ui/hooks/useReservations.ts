@@ -1,7 +1,7 @@
 // src/ui/hooks/useReservations.ts
 import * as React from 'react';
 import { api } from '../../lib/api';
-import { useQuery } from '../../lib/query';
+import { useQuery, clearQuery } from '../../lib/query';
 
 export type ReservationsFilters = {
   page?: number;
@@ -66,6 +66,11 @@ export function useReservations(filters: ReservationsFilters) {
     filters.unitId, filters.unitSlug, filters.areaId,
     filters.from, filters.to,
   ]);
+
+  // Limpa o cache da key atual quando os filtros mudam para forçar refetch
+  React.useEffect(() => {
+    clearQuery(key);
+  }, [key]);
 
   const { data, loading, error, refetch } = useQuery<ReservationsPage>(
     key,

@@ -1,5 +1,4 @@
 // src/ui/CheckinPage.tsx
-'use client';
 
 import * as React from 'react';
 import { api } from '../lib/api';
