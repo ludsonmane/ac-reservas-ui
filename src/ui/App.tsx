@@ -1277,7 +1277,6 @@ function ReservationsTable({
   }, [data, unitsById]);
 
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
-  const [qrBust, setQrBust] = React.useState<number>(0);
   const [noShowLoading, setNoShowLoading] = React.useState<string | null>(null);
 
   async function handleNoShow(r: Reservation) {
@@ -1383,8 +1382,6 @@ function ReservationsTable({
                 const createdAt =
                   (r as any).createdAt ?? (r as any).created_at ?? (r as any).created ?? null;
 
-                const qrUrl = apiUrl(`/v1/reservations/${r.id}/qrcode?v=${qrBust}`);
-
                 const rTypeRaw =
                   (r as any).reservationType ??
                   (r as any).reservation_type ??
@@ -1437,19 +1434,11 @@ function ReservationsTable({
 
                     {/* Cliente */}
                     <td className="px-3 py-2 align-top min-w-[260px]">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={qrUrl}
-                          className="h-11 w-11 rounded border border-border"
-                          crossOrigin="anonymous"
-                          alt=""
-                        />
-                        <div className="leading-tight">
-                          <div className="font-medium">{(r as any).fullName}</div>
-                          <div className="text-muted text-xs max-w-[260px]">
-                            <div className="truncate">{(r as any).email || ''}</div>
-                            <div className="truncate">{[(r as any).phone]}</div>
-                          </div>
+                      <div className="leading-tight">
+                        <div className="font-medium">{(r as any).fullName}</div>
+                        <div className="text-muted text-xs max-w-[260px]">
+                          <div className="truncate">{(r as any).email || ''}</div>
+                          <div className="truncate">{[(r as any).phone]}</div>
                         </div>
                       </div>
                     </td>
@@ -1539,7 +1528,6 @@ function ReservationsTable({
             await api(`/v1/reservations/${renewTarget.id}/qr/renew`, { method: 'POST', auth: true });
             setRenewTarget(null);
             setFilters({ ...filters });
-            setQrBust(Date.now());
             toast.success('QR renovado e status atualizado.');
           } catch (e: any) {
             const msg = e?.error?.message || e?.message || 'Erro ao renovar QR.';
