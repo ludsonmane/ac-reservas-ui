@@ -21,7 +21,7 @@ export type Reservation = {
   areaId?: string | null;   // NOVO
   areaName?: string | null; // NOVO (denormalizado)
   source?: string | null;
-  status: 'AWAITING_CHECKIN' | 'CHECKED_IN';
+  status: 'AWAITING_CHECKIN' | 'CHECKED_IN' | 'NO_SHOW';
   qrToken: string;
   qrExpiresAt?: string | null;
   checkedInAt?: string | null;
