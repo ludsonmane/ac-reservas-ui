@@ -1734,6 +1734,11 @@ function ReservationModal({
       source: form.utm_source || "Manual",
     };
 
+    // Adiciona status apenas na edição
+    if (editing && form.status) {
+      payload.status = form.status;
+    }
+
     if (editing && !isAdmin) {
       delete payload.utm_source;
       delete payload.utm_campaign;
@@ -1856,6 +1861,23 @@ function ReservationModal({
               <span>Source</span>
               <input className={`input py-2 ${lockMarketing ? 'opacity-60 cursor-not-allowed' : ''}`} value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="Origem (ex.: WhatsApp, Site, Balcão)" disabled={saving || lockMarketing} />
             </label>
+
+            {/* Status - apenas na edição */}
+            {editing && (
+              <label className="md:col-span-2">
+                <span>Status</span>
+                <select
+                  className="input py-2"
+                  value={form.status || 'AWAITING_CHECKIN'}
+                  onChange={(e) => set('status', e.target.value)}
+                  disabled={saving}
+                >
+                  <option value="AWAITING_CHECKIN">Aguardando Check-in</option>
+                  <option value="CHECKED_IN">Check-in Realizado</option>
+                  <option value="NO_SHOW">No Show</option>
+                </select>
+              </label>
+            )}
           </div>
         </div>
 
