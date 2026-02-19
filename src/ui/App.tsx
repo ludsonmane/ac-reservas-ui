@@ -1998,7 +1998,9 @@ function ReservationModal({
     const isRetroactive = new Date(form.reservationDate as any).getTime() < Date.now();
     // Permite ignorar capacidade quando marcado (para qualquer usuário).
     // Para ADMIN, datas retroativas continuam liberadas automaticamente.
-    const adminOverride = Boolean(form.adminOverride) || (isAdmin && isRetroactive);
+    // Overbooking (ignorar capacidade) permitido para todos os usuários.
+    // Para datas retroativas, liberamos automaticamente.
+    const adminOverride = Boolean(form.adminOverride) || isRetroactive;
 
     const payload: any = {
       fullName: form.fullName,
@@ -2036,11 +2038,21 @@ function ReservationModal({
 
     try {
       if (editing) {
-        await api(`/v1/reservations/${(editing as any).id}`, { method: 'PUT', body: payload, auth: true });
+        const saved: any = await api(`/v1/reservations/${(editing as any).id}`, { method: 'PUT', body: payload, auth: true });
         toast.success('Reserva atualizada.');
+
+        const ob = saved?.meta?.overbooking;
+        if (adminOverride && ob && ob.enabled) {
+          toast.info(`Overbooking aplicado: +${ob.exceededBy} acima do limite (${ob.limit}).`);
+        }
       } else {
-        await api('/v1/reservations', { method: 'POST', body: payload, auth: true });
+        const saved: any = await api('/v1/reservations', { method: 'POST', body: payload, auth: true });
         toast.success('Reserva criada.');
+
+        const ob = saved?.meta?.overbooking;
+        if (adminOverride && ob && ob.enabled) {
+          toast.info(`Overbooking aplicado: +${ob.exceededBy} acima do limite (${ob.limit}).`);
+        }
       }
       onSaved();
       onClose();
@@ -2171,7 +2183,7 @@ function ReservationModal({
                 <div className="text-sm leading-snug">
                   <div className="font-semibold">Ignorar capacidade (forçar reserva)</div>
                   <div className="text-muted">
-                    Marque para criar/editar mesmo quando o dia ou período estiver cheio. (ADMIN continua liberado automaticamente para datas retroativas.)
+                    Marque para criar/editar mesmo quando o dia ou período estiver cheio. (Para datas retroativas, o sistema libera automaticamente.)
                   </div>
                 </div>
               </div>
@@ -2414,9 +2426,11 @@ export default function App() {
         e?.detail?.error?.message ||
         e?.detail?.error ||
         'Sua sessão expirou. Para continuar, faça login novamente (menu ▸ Sair ▸ entrar).';
-      // Mantém o usuário “logado” até ele clicar em Sair.
-      // Atenção: se o backend expirar o token, algumas ações podem falhar até relogar.
       toast.error(reason);
+      // Se o backend respondeu 401, derruba a sessão local e volta pro login.
+      clearAuth();
+      invalidate('*');
+      window.location.replace(window.location.origin + window.location.pathname);
     }
     window.addEventListener('auth:expired', onAuthExpired);
     return () => window.removeEventListener('auth:expired', onAuthExpired);
