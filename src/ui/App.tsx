@@ -1,5 +1,5 @@
 // src/ui/App.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getBaseUrl, apiUrl } from '../lib/api';
 import { invalidate } from '../lib/query';
 import { useStore, setToken, clearAuth, setUser } from '../store';
@@ -54,6 +54,42 @@ function compact<T extends Record<string, any>>(obj: T): Partial<T> {
   });
   return out as Partial<T>;
 }
+
+
+/* ---------- helpers de MESAS via notes ---------- */
+// Como o backend ainda não tem campo próprio para mesas, a UI persiste as mesas dentro de `notes`
+// num formato estável: "\nMESAS: 321,322,333".
+// Assim dá pra criar + editar sem perder a informação.
+const TABLES_MARK = 'MESAS:';
+
+function normalizeTablesCsv(csv?: string | null) {
+  const raw = String(csv ?? '').trim();
+  if (!raw) return '';
+  const nums = raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => Number(s))
+    .filter(n => Number.isFinite(n) && n > 0)
+    .map(n => String(Math.trunc(n)));
+  // remove duplicados mantendo ordem
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const n of nums) {
+    if (!seen.has(n)) { seen.add(n); out.push(n); }
+  }
+  return out.join(',');
+}
+
+function extractTablesFromNotes(notes?: string | null) {
+  // Legado: em versões antigas, o UI gravava 'Mesas:' dentro de notes.
+  // Agora usamos o campo 'tables' do backend. Aqui só fazemos a leitura para pré-preencher.
+  const raw = String(notes ?? '').trim();
+  const m = raw.match(/(?:^|\n)Mesas?:\s*([^\n]+)/i);
+  const tablesCsv = m?.[1]?.trim() || '';
+  return { tablesCsv };
+}
+
 
 /* ---------- Loading Modal (inline) ---------- */
 function LoadingDialog({
@@ -1469,8 +1505,8 @@ function ReservationsTable({
                     {/* Ações */}
                     <td className="px-3 py-2 text-right align-top">
                       <div className="flex gap-2 justify-end">
-                        <IconBtn 
-                          title={isNoShow ? "Desmarcar No Show" : "Marcar No Show"} 
+                        <IconBtn
+                          title={isNoShow ? "Desmarcar No Show" : "Marcar No Show"}
                           danger={!isNoShow}
                           onClick={() => handleNoShow(r)}
                           disabled={noShowLoading === r.id || r.status === 'CHECKED_IN'}
@@ -1676,8 +1712,30 @@ function ReservationModal({
   const isAdmin = user?.role === 'ADMIN';
   const lockMarketing = !!editing && !isAdmin;
 
-  const [form, setForm] = React.useState<any>(() => ({
+  type ReservationForm = {
+    unitId: string | null;
+    areaId?: string | null;
+    fullName?: string;
+    people?: string | number;
+    kids?: string | number;
+    reservationDate?: string;
+    birthdayDate?: string;
+    cpf?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+    utm_source?: string;
+    utm_campaign?: string;
+    source?: string;
+    status?: string;
+    adminOverride?: boolean;
+    tables?: string | null; // CSV: "321,322,323" 
+    [k: string]: any;
+  };
+
+  const [form, setForm] = React.useState<ReservationForm>(() => ({
     unitId: defaultUnitId ?? null,
+    tables: null,
   }));
   const [saving, setSaving] = React.useState(false);
 
@@ -1688,44 +1746,272 @@ function ReservationModal({
   const unitNameOf = (u: any) => (u && typeof u === 'object' ? u.name : String(u ?? ''));
 
   React.useEffect(() => {
-    const f: any = editing
-      ? { ...editing }
-      : { people: 1, kids: 0, reservationDate: new Date().toISOString(), unitId: defaultUnitId ?? null, areaId: null };
+    const f: ReservationForm = editing
+      ? ({ ...(editing as any) } as ReservationForm)
+      : ({
+        people: 1,
+        kids: 0,
+        reservationDate: new Date().toISOString(),
+        unitId: defaultUnitId ?? null,
+        areaId: null,
+        tables: null,
+      } as ReservationForm);
 
     if (f.reservationDate) f.reservationDate = toLocalInput(f.reservationDate);
-    if (f.birthdayDate) f.birthdayDate = f.birthdayDate.substring(0, 10);
+    if (f.birthdayDate) f.birthdayDate = String(f.birthdayDate).substring(0, 10);
 
-    f.unitId = editing?.unitId ?? (defaultUnitId ?? null);
-    f.areaId = editing?.areaId ?? null;
+    f.unitId = (editing as any)?.unitId ?? (defaultUnitId ?? null);
+    f.areaId = (editing as any)?.areaId ?? null;
+
+    // Overbooking: opção de override (disponível para todos)
+    if (typeof f.adminOverride === 'undefined') f.adminOverride = false;
+
+    // garante string no formato esperado
+    if (typeof f.tables !== 'string') {
+      f.tables = (f.tables ?? null) as any;
+    }
+
+// Extrai mesas do campo notes (fallback compatível com backend atual)
+// Se já houver `tables`, mantém; se não, usa o que estiver em notes.
+{
+  const ex = extractTablesFromNotes((f as any).notes);
+  if (!f.tables && ex.tablesCsv) f.tables = ex.tablesCsv as any;
+}
+
 
     setForm(f);
-  }, [editing, open, defaultUnitId]);
+  }, [editing, open, defaultUnitId, isAdmin]);
 
   React.useEffect(() => {
     if (open && !editing && defaultUnitId) {
-      setForm((s: any) => ({ ...s, unitId: defaultUnitId, areaId: null }));
+      setForm((s) => ({ ...s, unitId: defaultUnitId, areaId: null }));
     }
   }, [defaultUnitId, open, editing]);
 
-  if (!open) return null;
+  const set = (k: keyof ReservationForm | string, v: any) =>
+    setForm((s) => ({ ...s, [k]: v }));
 
-  const set = (k: string, v: any) => setForm((s: any) => ({ ...s, [k]: v }));
+  const onlyDigits = (v: string) => v.replace(/[^0-9]/g, '');
+
+  // -----------------------------
+  // TablesTagInput (CONTROLADO)
+  // - salva CSV sem zero à esquerda: "321,322"
+  // - UI: chips + autocomplete + enter
+  // -----------------------------
+  type TablesTagInputProps = {
+    disabled?: boolean;
+    value: string | null | undefined;         // CSV
+    onChange: (csv: string) => void;          // CSV
+    min?: number;
+    max?: number;
+  };
+
+  function TablesTagInput({
+    disabled = false,
+    value,
+    onChange,
+    min = 1,
+    max = 1000,
+  }: TablesTagInputProps) {
+    const [input, setInput] = React.useState<string>('');
+    const [openSug, setOpenSug] = React.useState<boolean>(false);
+    const [active, setActive] = React.useState<number>(0);
+
+    const selected = React.useMemo<number[]>(() => {
+      const raw = (value ?? '').toString();
+      const nums = raw
+        .split(',')
+        .map((x: string) => x.trim())
+        .filter(Boolean)
+        .map((x: string) => Number(x))
+        .filter((n: number) => Number.isFinite(n) && n >= min && n <= max);
+
+      const seen = new Set<number>();
+      const out: number[] = [];
+      for (const n of nums) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          out.push(n);
+        }
+      }
+      return out;
+    }, [value, min, max]);
+
+    // Mantém visual consistente: 3 dígitos até 999, 4 dígitos quando suporta 1000+
+    const formatMesa = (n: number) => String(n).padStart(max >= 1000 ? 4 : 3, '0');
+
+    const setSelected = (next: number[]) => {
+      const clean = next.filter((n) => Number.isFinite(n) && n >= min && n <= max);
+      const csv = clean.join(',');
+      onChange(csv || ''); // mantém compat
+    };
+
+    const addOne = (n: number) => {
+      if (!(Number.isFinite(n) && n >= min && n <= max)) return;
+      if (selected.includes(n)) return;
+      setSelected([...selected, n]);
+    };
+
+    const removeOne = (n: number) => {
+      setSelected(selected.filter((x) => x !== n));
+    };
+
+    const suggestions = React.useMemo<number[]>(() => {
+      const q = input.trim();
+      if (!q) return [];
+      if (!/^\d{1,4}$/.test(q)) return [];
+      const prefix = q;
+
+      const out: number[] = [];
+      for (let n = min; n <= max; n++) {
+        const s = String(n);
+        const p = formatMesa(n);
+        if (s.startsWith(prefix) || p.startsWith(prefix.padStart(prefix.length, '0'))) {
+          if (!selected.includes(n)) out.push(n);
+          if (out.length >= 10) break;
+        }
+      }
+      return out;
+    }, [input, selected, min, max]);
+
+    const commitFromInput = () => {
+      const n = Number(input.trim());
+      if (!Number.isFinite(n)) return;
+      addOne(n);
+      setInput('');
+      setOpenSug(false);
+      setActive(0);
+    };
+
+    const commitActive = () => {
+      const n = suggestions[active];
+      if (n == null) return;
+      addOne(n);
+      setInput('');
+      setOpenSug(false);
+      setActive(0);
+    };
+
+    React.useEffect(() => {
+      if (!openSug) setActive(0);
+    }, [openSug]);
+
+    return (
+      <div className="relative">
+        {/* chips */}
+        <div className="mb-2 flex flex-wrap gap-2">
+          {selected.length === 0 ? (
+            <div className="text-sm text-muted">Nenhuma mesa vinculada</div>
+          ) : (
+            selected.map((n) => (
+              <span
+                key={n}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-sm"
+              >
+                <span className="font-medium">Mesa {formatMesa(n)}</span>
+                <button
+                  type="button"
+                  className="rounded-full px-2 py-0.5 text-muted hover:bg-panel disabled:opacity-50"
+                  onClick={() => removeOne(n)}
+                  disabled={disabled}
+                  aria-label={`Remover mesa ${formatMesa(n)}`}
+                  title="Remover"
+                >
+                  ×
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+
+        {/* input */}
+        <input
+          className="input py-2 text-foreground placeholder:text-muted"
+          placeholder={`Digite a mesa (${min} a ${max}) e pressione Enter`}
+          value={input}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value.replace(/[^\d]/g, '').slice(0, 4);
+            setInput(v);
+            setOpenSug(Boolean(v));
+          }}
+          onFocus={() => setOpenSug(Boolean(input.trim()))}
+          onBlur={() => setTimeout(() => setOpenSug(false), 120)}
+          onKeyDown={(e) => {
+            if (disabled) return;
+
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (openSug && suggestions.length) commitActive();
+              else commitFromInput();
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              if (!openSug) setOpenSug(true);
+              setActive((a) => Math.min(a + 1, Math.max(0, suggestions.length - 1)));
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setActive((a) => Math.max(0, a - 1));
+            } else if (e.key === 'Escape') {
+              setOpenSug(false);
+            } else if (e.key === 'Backspace' && input === '' && selected.length) {
+              removeOne(selected[selected.length - 1]);
+            }
+          }}
+        />
+
+        {/* dropdown */}
+        {openSug && suggestions.length > 0 && (
+          <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+            {suggestions.map((n, idx) => (
+              <button
+                key={n}
+                type="button"
+                disabled={disabled}
+                className={[
+                  'flex w-full items-center justify-between px-4 py-2 text-left text-sm',
+                  'hover:bg-panel disabled:opacity-50 disabled:hover:bg-card',
+                  idx === active ? 'bg-panel' : '',
+                ].join(' ')}
+                onMouseDown={(ev) => {
+                  ev.preventDefault(); // não deixa o blur matar o clique
+                  addOne(n);
+                  setInput('');
+                  setOpenSug(false);
+                  setActive(0);
+                }}
+              >
+                <span>Mesa: {formatMesa(n)}</span>
+                <span className="text-xs text-muted">Enter</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   async function handleSave() {
     if (saving) return;
     setSaving(true);
+
+    const reservationDateISO = new Date(form.reservationDate as any).toISOString();
+    const isRetroactive = new Date(form.reservationDate as any).getTime() < Date.now();
+    // Permite ignorar capacidade quando marcado (para qualquer usuário).
+    // Para ADMIN, datas retroativas continuam liberadas automaticamente.
+    const adminOverride = Boolean(form.adminOverride) || (isAdmin && isRetroactive);
+
     const payload: any = {
       fullName: form.fullName,
       people: Number(form.people || 1),
       kids: Number(form.kids || 0),
 
-      reservationDate: new Date(form.reservationDate).toISOString(),
+      reservationDate: reservationDateISO,
       birthdayDate: form.birthdayDate ? new Date(form.birthdayDate).toISOString() : null,
 
       cpf: form.cpf || null,
       phone: form.phone || null,
       email: form.email || null,
-      notes: form.notes || null,
+      notes: (form.notes || null),
 
       unitId: form.unitId || null,
       areaId: form.areaId || null,
@@ -1733,12 +2019,14 @@ function ReservationModal({
       utm_source: form.utm_source || "Manual",
       utm_campaign: form.utm_campaign || null,
       source: form.utm_source || "Manual",
+
+      // Mesas (CSV)
+      tables: (String(form.tables || '').trim() || null),
+
+      adminOverride,
     };
 
-    // Adiciona status apenas na edição
-    if (editing && form.status) {
-      payload.status = form.status;
-    }
+    if (editing && form.status) payload.status = form.status;
 
     if (editing && !isAdmin) {
       delete payload.utm_source;
@@ -1748,7 +2036,7 @@ function ReservationModal({
 
     try {
       if (editing) {
-        await api(`/v1/reservations/${editing.id}`, { method: 'PUT', body: payload, auth: true });
+        await api(`/v1/reservations/${(editing as any).id}`, { method: 'PUT', body: payload, auth: true });
         toast.success('Reserva atualizada.');
       } else {
         await api('/v1/reservations', { method: 'POST', body: payload, auth: true });
@@ -1764,6 +2052,8 @@ function ReservationModal({
       setSaving(false);
     }
   }
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={editing ? 'Editar reserva' : 'Nova reserva'}>
@@ -1791,6 +2081,16 @@ function ReservationModal({
               </select>
             </label>
 
+            <label className="md:col-span-2">
+              <span>Mesas</span>
+              <TablesTagInput
+                disabled={saving}
+                value={form.tables}
+                onChange={(csv) => set('tables', (csv.trim() ? csv : null))}
+              />
+
+            </label>
+
             <label>
               <span>Nome completo*</span>
               <input className="input py-2" value={form.fullName || ''} onChange={(e) => set('fullName', e.target.value)} placeholder="Ex.: Maria Silva" disabled={saving} />
@@ -1798,11 +2098,38 @@ function ReservationModal({
 
             <label>
               <span>Pessoas*</span>
-              <input className="input py-2" type="number" min={1} value={form.people ?? 1} onChange={(e) => set('people', parseInt(e.target.value || '1'))} disabled={saving} />
+              <input
+                className="input py-2"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={form.people ?? ''}
+                onChange={(e) => set('people', onlyDigits(e.target.value))}
+                onBlur={() => {
+                  const n = Number(form.people);
+                  set('people', String(n && n >= 1 ? n : 1));
+                }}
+                placeholder="1"
+                disabled={saving}
+              />
             </label>
+
             <label>
               <span>Crianças</span>
-              <input className="input py-2" type="number" min={0} value={form.kids ?? 0} onChange={(e) => set('kids', parseInt(e.target.value || '0'))} disabled={saving} />
+              <input
+                className="input py-2"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={form.kids ?? ''}
+                onChange={(e) => set('kids', onlyDigits(e.target.value))}
+                onBlur={() => {
+                  const n = Number(form.kids);
+                  set('kids', String(Number.isFinite(n) && n >= 0 ? n : 0));
+                }}
+                placeholder="0"
+                disabled={saving}
+              />
             </label>
 
             <label className="md:col-span-2">
@@ -1829,6 +2156,25 @@ function ReservationModal({
             <label>
               <span>Data de aniversário</span>
               <input className="input py-2" type="date" value={form.birthdayDate || ''} onChange={(e) => set('birthdayDate', e.target.value)} disabled={saving} />
+            </label>
+
+            <label className="md:col-span-2">
+              <span>Overbooking</span>
+              <div className="flex items-start gap-3 rounded-xl border border-border bg-white px-3 py-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={Boolean(form.adminOverride)}
+                  onChange={(e) => set('adminOverride', e.target.checked)}
+                  disabled={saving}
+                />
+                <div className="text-sm leading-snug">
+                  <div className="font-semibold">Ignorar capacidade (forçar reserva)</div>
+                  <div className="text-muted">
+                    Marque para criar/editar mesmo quando o dia ou período estiver cheio. (ADMIN continua liberado automaticamente para datas retroativas.)
+                  </div>
+                </div>
+              </div>
             </label>
 
             <label>
@@ -1863,7 +2209,6 @@ function ReservationModal({
               <input className={`input py-2 ${lockMarketing ? 'opacity-60 cursor-not-allowed' : ''}`} value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="Origem (ex.: WhatsApp, Site, Balcão)" disabled={saving || lockMarketing} />
             </label>
 
-            {/* Status - apenas na edição */}
             {editing && (
               <label className="md:col-span-2">
                 <span>Status</span>
@@ -1899,6 +2244,7 @@ function ReservationModal({
     </div>
   );
 }
+
 
 /* ---------- Página: Reservas ---------- */
 function ReservationsPanel() {
@@ -2063,13 +2409,13 @@ export default function App() {
 
   useEffect(() => {
     function onAuthExpired(e: any) {
-      clearAuth();
-      invalidate('*');
       const reason =
         e?.detail?.userMessage ||
         e?.detail?.error?.message ||
         e?.detail?.error ||
-        'Sua sessão expirou. Faça login novamente.';
+        'Sua sessão expirou. Para continuar, faça login novamente (menu ▸ Sair ▸ entrar).';
+      // Mantém o usuário “logado” até ele clicar em Sair.
+      // Atenção: se o backend expirar o token, algumas ações podem falhar até relogar.
       toast.error(reason);
     }
     window.addEventListener('auth:expired', onAuthExpired);

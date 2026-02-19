@@ -122,7 +122,10 @@ const reqThrottle = {
 const AUTH_EXPIRED_EVENT = 'auth:expired';
 let lastAuthNotifyAt = 0;
 function handleAuthExpiry(detail?: any) {
-  try { localStorage.removeItem('token'); } catch {}
+  // NÃO removemos o token aqui.
+  // Motivo: manter a sessão “logada” até o usuário clicar em sair.
+  // Se o backend expirar o token, emitimos o evento para a UI avisar,
+  // mas não apagamos o token automaticamente.
   const now = Date.now();
   if (now - lastAuthNotifyAt > 1500) {
     lastAuthNotifyAt = now;

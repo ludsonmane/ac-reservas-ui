@@ -12,6 +12,7 @@ export type Reservation = {
   phone?: string | null;
   email?: string | null;
   notes?: string | null;
+  tables?: string | null;
   utm_source?: string | null;
   utm_campaign?: string | null;
   utm_medium?: string | null;
