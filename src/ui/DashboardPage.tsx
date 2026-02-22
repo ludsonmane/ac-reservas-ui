@@ -52,6 +52,18 @@ function safeStr(v: any) {
   return s && s !== 'undefined' && s !== 'null' ? s : '';
 }
 
+function normalizeOriginForDashboard(r: Reservation) {
+  return safeStr(r.utm_source) || '(sem origem)';
+}
+
+function mergeBotmakerDisparoOnly(origin: string) {
+  const v = safeStr(origin).toLowerCase();
+  if (!v || v === '(sem origem)') return 'SEM_ORIGEM';
+  if (v.includes('botmaker') || v.includes('disparo')) return 'BOTMAKER_DISPARO';
+  return origin;
+}
+
+
 function pct(n: number, d: number) {
   if (!d) return 0;
   return Math.round((n / d) * 1000) / 10; // 1 decimal
@@ -263,15 +275,20 @@ export default function DashboardPage() {
   const avgPax = totalRes ? Math.round((totalPax / totalRes) * 10) / 10 : 0;
   const checkinRate = pct(checkins, totalRes);
 
-  const bySource = React.useMemo(() => groupBy(items, r => r.source || ''), [items]);
+  const byOrigin = React.useMemo(
+    () => groupBy(items, r => mergeBotmakerDisparoOnly(normalizeOriginForDashboard(r))),
+    [items]
+  );
   const byCampaign = React.useMemo(() => groupBy(items, r => r.utm_campaign || ''), [items]);
   const byMedium = React.useMemo(() => groupBy(items, r => r.utm_medium || ''), [items]);
-  const byUtmSource = React.useMemo(() => groupBy(items, r => r.utm_source || ''), [items]);
   const byArea = React.useMemo(
     () => groupBy(items, r => (r.areaName || r.area || '').trim() || '(sem área)'),
     [items]
   );
   const byType = React.useMemo(() => groupBy(items, r => r.reservationType || ''), [items]);
+
+  const botmakerDisparoRow = byOrigin.find(r => r.key === 'BOTMAKER_DISPARO');
+  const semOrigemRow = byOrigin.find(r => r.key === 'SEM_ORIGEM');
 
   // distribuição de people (adultos) por reserva
   const peopleDist = React.useMemo(() => {
@@ -299,7 +316,7 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
             <div className="title text-2xl">Dashboard</div>
-            <div className="text-sm text-muted">Visão estratégica de Reservas + Check-in, Origem e UTMs. Atualizado: {lastUpdated}</div>
+            <div className="text-sm text-muted">Visão estratégica de Reservas, Check-in e Origem (UTM_SOURCE). Atualizado: {lastUpdated}</div>
           </div>
           <div className="flex gap-2">
             <button className="btn" onClick={load} disabled={loading}>
@@ -356,17 +373,27 @@ export default function DashboardPage() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatCard title="Reservas" value={totalRes} hint={<span>Período selecionado</span>} />
         <StatCard title="Check-ins" value={checkins} hint={<span>Taxa: {checkinRate}%</span>} />
-        <StatCard title="Aguardando" value={awaiting} hint={<span>Fila de execução</span>} />
         <StatCard title="Pessoas" value={totalPax} hint={<span>Adultos {totalPeople} • Kids {totalKids}</span>} />
         <StatCard title="Média por reserva" value={`${avgPax}`} hint={<span>Adultos: {avgAdults}</span>} />
+        <StatCard
+          title="Botmaker + Disparo"
+          value={botmakerDisparoRow?.reservas ?? 0}
+          hint={<span>{pct(botmakerDisparoRow?.reservas ?? 0, totalRes)}% das reservas</span>}
+        />
+        <StatCard
+          title="Sem origem"
+          value={semOrigemRow?.reservas ?? 0}
+          hint={<span>{pct(semOrigemRow?.reservas ?? 0, totalRes)}% (tracking)</span>}
+        />
+        <StatCard title="Aguardando" value={awaiting} hint={<span>Fila de execução</span>} />
         <StatCard title="Saúde do funil" value={checkinRate >= 70 ? '🟢' : checkinRate >= 45 ? '🟡' : '🔴'} hint={<span>Baseado na taxa de check-in</span>} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <BarList title="Origem (source)" rows={bySource} help="Quais canais estão gerando reservas, e se viram check-in." />
+        <BarList title="Origem (UTM Source)" rows={byOrigin} help="Usa UTM_SOURCE. Soma apenas botmaker + disparo em um único canal." />
         <BarList title="Tipo de reserva" rows={byType} help="Mix: Particular / Empresa / Aniversário / Confraternização." />
       </div>
 
@@ -376,7 +403,22 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <BarList title="UTM Source" rows={byUtmSource} help="Fontes: instagram, meta, google, etc." />
+        <div className="card">
+          <div className="title text-lg">Leitura executiva de origem</div>
+          <div className="text-xs text-muted mt-0.5">Todas as origens do período. Só botmaker + disparo são consolidados.</div>
+          <div className="mt-3 space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {byOrigin.map((r) => (
+              <div key={r.key} className="flex items-center justify-between rounded-lg border border-border bg-panel/40 px-3 py-2">
+                <div className="min-w-0 pr-3">
+                  <div className="truncate text-sm font-medium">{r.label}</div>
+                  <div className="text-[11px] text-muted">{pct(r.reservas, totalRes)}% do total</div>
+                </div>
+                <div className="text-sm font-semibold">{r.reservas}</div>
+              </div>
+            ))}
+            {!byOrigin.length ? <div className="text-sm text-muted">Sem dados no período.</div> : null}
+          </div>
+        </div>
         <BarList title="Áreas" rows={byArea} help="Distribuição das reservas por área (ajuda a olhar capacidade e operação)." />
       </div>
 

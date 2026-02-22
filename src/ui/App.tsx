@@ -1755,6 +1755,8 @@ function ReservationModal({
         unitId: defaultUnitId ?? null,
         areaId: null,
         tables: null,
+        utm_source: 'manual',
+        source: 'manual',
       } as ReservationForm);
 
     if (f.reservationDate) f.reservationDate = toLocalInput(f.reservationDate);
@@ -2018,9 +2020,10 @@ function ReservationModal({
       unitId: form.unitId || null,
       areaId: form.areaId || null,
 
-      utm_source: form.utm_source || "Manual",
+      // Reserva criada pelo painel sempre entra como origem manual
+      utm_source: editing ? (form.utm_source || 'manual') : 'manual',
       utm_campaign: form.utm_campaign || null,
-      source: form.utm_source || "Manual",
+      source: editing ? (form.utm_source || 'manual') : 'manual',
 
       // Mesas (CSV)
       tables: (String(form.tables || '').trim() || null),
