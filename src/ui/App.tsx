@@ -1754,9 +1754,10 @@ function ReservationModal({
         reservationDate: new Date().toISOString(),
         unitId: defaultUnitId ?? null,
         areaId: null,
-        tables: null,
-        utm_source: 'manual',
+        // Inserção manual (painel): não inferir source a partir de UTM.
+        // Deixa editável no modal; default "manual" para clique em "Nova Reserva".
         source: 'manual',
+        tables: null,
       } as ReservationForm);
 
     if (f.reservationDate) f.reservationDate = toLocalInput(f.reservationDate);
@@ -2020,10 +2021,13 @@ function ReservationModal({
       unitId: form.unitId || null,
       areaId: form.areaId || null,
 
-      // Reserva criada pelo painel sempre entra como origem manual
-      utm_source: editing ? (form.utm_source || 'manual') : 'manual',
+      // Marketing/origem: NÃO auto-atribuir source pelo utm_source.
+      // UTM Source pode ficar vazio (null) em inserções manuais.
+      utm_source: (form.utm_source && String(form.utm_source).trim()) ? String(form.utm_source).trim() : null,
       utm_campaign: form.utm_campaign || null,
-      source: editing ? (form.utm_source || 'manual') : 'manual',
+      // Source deve ser preenchido no modal (ex.: WhatsApp, Site, Balcão, Manual)
+      // Default: manual (definido no estado inicial acima).
+      source: (form.source && String(form.source).trim()) ? String(form.source).trim() : 'manual',
 
       // Mesas (CSV)
       tables: (String(form.tables || '').trim() || null),
