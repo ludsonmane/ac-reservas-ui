@@ -1,0 +1,164 @@
+/* src/ui/index.css — Mané Reservas UI base styles */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --color-primary: #16a34a;
+  --color-primary-hover: #15803d;
+  --color-danger: #dc2626;
+  --color-border: rgba(0,0,0,.1);
+  --color-muted: #6b7280;
+  --color-card: #ffffff;
+  --color-panel: #f9fafb;
+  --color-foreground: #111827;
+  --color-background: #f3f4f6;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+/* ── Layout ── */
+.container {
+  width: 100%;
+  max-width: 1400px;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+/* ── Card ── */
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+/* ── Inputs ── */
+.input {
+  display: block;
+  width: 100%;
+  padding: .45rem .75rem;
+  font-size: .875rem;
+  border: 1px solid var(--color-border);
+  border-radius: .5rem;
+  background: var(--color-card);
+  color: var(--color-foreground);
+  outline: none;
+  transition: border-color .15s;
+}
+.input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(22,163,74,.15);
+}
+.input[disabled] {
+  opacity: .6;
+  cursor: not-allowed;
+}
+label > span {
+  display: block;
+  font-size: .75rem;
+  font-weight: 500;
+  margin-bottom: .3rem;
+  color: var(--color-muted);
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .45rem .9rem;
+  font-size: .875rem;
+  font-weight: 500;
+  border-radius: .5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-foreground);
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--color-panel); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger);
+}
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+.btn-sm {
+  padding: .3rem .6rem;
+  font-size: .8rem;
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .15rem .6rem;
+  border-radius: 9999px;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  border: 1px solid transparent;
+}
+.badge-ok    { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.badge-wait  { background: #fef9c3; color: #854d0e; border-color: #fef08a; }
+.badge-noshow { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+/* ── Table ── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .875rem;
+}
+.table thead tr {
+  background: var(--color-panel);
+  border-bottom: 2px solid var(--color-border);
+}
+.table th {
+  font-weight: 600;
+  padding: .5rem .75rem;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--color-muted);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: background .1s;
+}
+.table tbody tr:hover { background: var(--color-panel); }
+.table td { padding: .6rem .75rem; vertical-align: middle; }
+
+/* ── Misc ── */
+.title { font-size: 1.25rem; font-weight: 600; margin: 0 0 .5rem; }
+.text-muted { color: var(--color-muted); }
+.text-primary { color: var(--color-primary); }
+.text-danger  { color: var(--color-danger); }
+.border { border: 1px solid var(--color-border); }
+.border-border { border-color: var(--color-border); }
