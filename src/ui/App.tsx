@@ -2415,7 +2415,7 @@ function ReservationsPanel() {
         open={!!filters.showModal}
         editing={filters.editing}
         onClose={() => setFilters({ ...filters, showModal: false, editing: null })}
-        onSaved={() => { invalidate('reservations'); setFilters({ ...filters }); }}
+        onSaved={() => setFilters({ ...filters })}
         defaultUnitId={filters.unitId || undefined}
       />
 
