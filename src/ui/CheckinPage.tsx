@@ -282,7 +282,7 @@ function Summary({
       />
       <Info
         label="Data/Hora"
-        value={resv.reservationDate ? new Date(resv.reservationDate).toLocaleString() : '—'}
+        value={resv.reservationDate ? new Date(resv.reservationDate).toLocaleString('pt-BR') : '—'}
       />
     </div>
   );
@@ -318,7 +318,7 @@ function SuccessPanel({
           <h3 className="text-lg font-normal text-green-800">Check-in confirmado</h3>
           <p className="text-green-900/80 text-sm">
             {resv.checkedInAt
-              ? `Validação em ${new Date(resv.checkedInAt).toLocaleString()}`
+              ? `Validação em ${new Date(resv.checkedInAt).toLocaleString('pt-BR')}`
               : 'Validação concluída.'}
           </p>
 
@@ -339,7 +339,7 @@ function SuccessPanel({
             <Info label="Área" value={areaLabel} />
             <Info
               label="Data/Hora"
-              value={resv.reservationDate ? new Date(resv.reservationDate).toLocaleString() : '—'}
+              value={resv.reservationDate ? new Date(resv.reservationDate).toLocaleString('pt-BR') : '—'}
             />
           </div>
 

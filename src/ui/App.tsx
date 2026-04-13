@@ -358,7 +358,7 @@ function ConsultModal({
 
               <div>
                 <div className="text-xs text-muted">Data/Hora</div>
-                <div className="text-base">{new Date(resv.reservationDate).toLocaleString()}</div>
+                <div className="text-base">{new Date(resv.reservationDate).toLocaleString('pt-BR')}</div>
               </div>
               <div>
                 <div className="text-xs text-muted">Pessoas</div>
@@ -1347,7 +1347,7 @@ function ReservationsTable({
   }
   function fmtDateTime(iso?: string | null) {
     if (!iso) return '-';
-    try { return new Date(iso).toLocaleString(); } catch { return '-'; }
+    try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '-'; }
   }
 
   const tableScrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -1464,7 +1464,7 @@ function ReservationsTable({
               {data.items.map((r: Reservation) => {
                 const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : r.status === 'NO_SHOW' ? 'badge-noshow' : 'badge-wait';
                 const isNoShow = r.status === 'NO_SHOW';
-                const when = new Date(r.reservationDate).toLocaleString();
+                const when = new Date(r.reservationDate).toLocaleString('pt-BR');
 
                 const unitLabel =
                   (r as any).unitId ? (unitsById[(r as any).unitId] ?? undefined)

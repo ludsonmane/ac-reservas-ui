@@ -257,7 +257,7 @@ function AreasTable({
                         {a.isActive ? 'Ativa' : 'Inativa'}
                       </span>
                     </td>
-                    <td>{a.createdAt ? new Date(a.createdAt).toLocaleString() : '-'}</td>
+                    <td>{a.createdAt ? new Date(a.createdAt).toLocaleString('pt-BR') : '-'}</td>
                     <td className="text-right">
                       <div className="flex gap-1 justify-end">
                         <button className="icon-btn" title="Editar área" onClick={() => onEdit(a)}>
