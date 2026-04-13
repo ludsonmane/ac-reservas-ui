@@ -2119,15 +2119,25 @@ function ReservationModal({
         const old = editing as any;
         if (payload.fullName && payload.fullName !== old.fullName) changes.push(`Nome: ${payload.fullName}`);
         if (payload.people && payload.people !== old.people) changes.push(`Pessoas: ${payload.people}`);
-        if (payload.kids !== undefined && payload.kids !== old.kids) changes.push(`Crianças: ${payload.kids}`);
+        if (payload.kids !== undefined && payload.kids !== (old.kids ?? 0)) changes.push(`Crianças: ${payload.kids}`);
         if (payload.tables !== (old.tables || null)) changes.push(`Mesas: ${payload.tables || 'nenhuma'}`);
         if (payload.areaId && payload.areaId !== old.areaId) {
           const areaName = ((areasByUnit as any)?.data || areasByUnit as any)?.find?.((a: any) => a.id === payload.areaId)?.name;
           if (areaName) changes.push(`Área: ${areaName}`);
         }
+        if (payload.unitId && payload.unitId !== old.unitId) {
+          const unitName = (units as any[])?.find((u: any) => (u.id || u) === payload.unitId)?.name;
+          if (unitName) changes.push(`Unidade: ${unitName}`);
+        }
         if (payload.status && payload.status !== old.status) changes.push(`Status: ${payload.status}`);
+        // Compara data/horário
+        const oldDateISO = old.reservationDate ? new Date(old.reservationDate).toISOString() : '';
+        const newDateISO = payload.reservationDate ? new Date(payload.reservationDate).toISOString() : '';
+        if (newDateISO && oldDateISO !== newDateISO) {
+          changes.push(`Data: ${new Date(payload.reservationDate).toLocaleString('pt-BR')}`);
+        }
 
-        const detail = changes.length > 0 ? `\n${changes.join(' · ')}` : '';
+        const detail = changes.length > 0 ? ` — ${changes.join(' · ')}` : '';
         toast.success(`Reserva atualizada!${detail}`);
 
         const ob = saved?.meta?.overbooking;
