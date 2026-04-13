@@ -2122,7 +2122,7 @@ function ReservationModal({
         if (payload.kids !== undefined && payload.kids !== old.kids) changes.push(`Crianças: ${payload.kids}`);
         if (payload.tables !== (old.tables || null)) changes.push(`Mesas: ${payload.tables || 'nenhuma'}`);
         if (payload.areaId && payload.areaId !== old.areaId) {
-          const areaName = (areasByUnit as any[])?.find((a: any) => a.id === payload.areaId)?.name;
+          const areaName = ((areasByUnit as any)?.data || areasByUnit as any)?.find?.((a: any) => a.id === payload.areaId)?.name;
           if (areaName) changes.push(`Área: ${areaName}`);
         }
         if (payload.status && payload.status !== old.status) changes.push(`Status: ${payload.status}`);
