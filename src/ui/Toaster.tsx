@@ -22,7 +22,6 @@ export default function Toaster() {
       (nextList) => {
         setItems(nextList);
 
-        // Cancela timers de toasts que não existem mais
         const keepIds = new Set(nextList.map((it) => it.id));
         for (const [id, timer] of timersRef.current.entries()) {
           if (!keepIds.has(id)) {
@@ -51,38 +50,49 @@ export default function Toaster() {
 
   return (
     <div
-      className="pointer-events-none fixed z-[70] top-4 right-4 flex flex-col gap-2"
+      className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center"
       aria-live="polite"
     >
-      {items.map((t) => (
-        <div
-          key={t.id}
-          className={[
-            'pointer-events-auto card px-4 py-3 shadow-soft min-w-[260px] max-w-[340px] border transition-all',
-            t.type === 'success'
-              ? 'border-[#10b981] bg-[#ecfdf5]'
-              : t.type === 'error'
-              ? 'border-[#ef4444] bg-[#fef2f2]'
-              : 'border-[#3b82f6] bg-[#eef2ff]',
-          ].join(' ')}
-          role="status"
-        >
-          <div className="flex items-start gap-3">
-            <div className="mt-[2px] select-none">
-              {t.type === 'success' ? '✅' : t.type === 'error' ? '⚠️' : 'ℹ️'}
+      <div className="flex flex-col gap-3">
+        {items.map((t) => (
+          <div
+            key={t.id}
+            style={{
+              pointerEvents: 'auto',
+              minWidth: 340,
+              maxWidth: 480,
+              padding: '1rem 1.5rem',
+              borderRadius: '1rem',
+              border: '2px solid',
+              borderColor: t.type === 'success' ? '#10b981' : t.type === 'error' ? '#ef4444' : '#3b82f6',
+              background: t.type === 'success' ? '#ecfdf5' : t.type === 'error' ? '#fef2f2' : '#eef2ff',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,.25)',
+              animation: 'toast-in .3s ease-out',
+            }}
+            role="status"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ fontSize: '1.5rem', flexShrink: 0 }}>
+                {t.type === 'success' ? '✅' : t.type === 'error' ? '⚠️' : 'ℹ️'}
+              </div>
+              <div style={{ fontSize: '1rem', fontWeight: 600, flex: 1, wordBreak: 'break-word' }}>
+                {t.message}
+              </div>
+              <button
+                onClick={() => handleClose(t.id)}
+                aria-label="Fechar"
+                title="Fechar"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '1.1rem', color: '#6b7280', padding: '0.25rem',
+                }}
+              >
+                ✕
+              </button>
             </div>
-            <div className="text-sm text-text/90 break-words">{t.message}</div>
-            <button
-              className="ml-auto btn btn-ghost btn-sm"
-              onClick={() => handleClose(t.id)}
-              aria-label="Fechar"
-              title="Fechar"
-            >
-              ✕
-            </button>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,14 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: 'dist',
     sourcemap: false,
   },
   server: {
     port: 5173,
+    proxy: {
+      '/v1': {
+        target: 'https://api.mane.com.vc',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
 })

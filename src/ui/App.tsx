@@ -2113,7 +2113,22 @@ function ReservationModal({
     try {
       if (editing) {
         const saved: any = await api(`/v1/reservations/${(editing as any).id}`, { method: 'PUT', body: payload, auth: true });
-        toast.success('Reserva atualizada.');
+
+        // Monta resumo das alterações
+        const changes: string[] = [];
+        const old = editing as any;
+        if (payload.fullName && payload.fullName !== old.fullName) changes.push(`Nome: ${payload.fullName}`);
+        if (payload.people && payload.people !== old.people) changes.push(`Pessoas: ${payload.people}`);
+        if (payload.kids !== undefined && payload.kids !== old.kids) changes.push(`Crianças: ${payload.kids}`);
+        if (payload.tables !== (old.tables || null)) changes.push(`Mesas: ${payload.tables || 'nenhuma'}`);
+        if (payload.areaId && payload.areaId !== old.areaId) {
+          const areaName = (areasByUnit as any[])?.find((a: any) => a.id === payload.areaId)?.name;
+          if (areaName) changes.push(`Área: ${areaName}`);
+        }
+        if (payload.status && payload.status !== old.status) changes.push(`Status: ${payload.status}`);
+
+        const detail = changes.length > 0 ? `\n${changes.join(' · ')}` : '';
+        toast.success(`Reserva atualizada!${detail}`);
 
         const ob = saved?.meta?.overbooking;
         if (adminOverride && ob && ob.enabled) {
@@ -2121,7 +2136,7 @@ function ReservationModal({
         }
       } else {
         const saved: any = await api('/v1/reservations', { method: 'POST', body: payload, auth: true });
-        toast.success('Reserva criada.');
+        toast.success(`Reserva criada! ${payload.fullName} · ${payload.people} pessoas${payload.tables ? ' · Mesas: ' + payload.tables : ''}`);
 
         const ob = saved?.meta?.overbooking;
         if (adminOverride && ob && ob.enabled) {
@@ -2415,7 +2430,7 @@ function ReservationsPanel() {
         open={!!filters.showModal}
         editing={filters.editing}
         onClose={() => setFilters({ ...filters, showModal: false, editing: null })}
-        onSaved={() => setFilters({ ...filters })}
+        onSaved={() => { invalidate('reservations'); setFilters({ ...filters }); }}
         defaultUnitId={filters.unitId || undefined}
       />
 

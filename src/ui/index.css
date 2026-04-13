@@ -1,32 +1,47 @@
+@import "tailwindcss";
+
 /* src/ui/index.css — Mané Reservas UI base styles */
 
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
 
-:root {
-  --color-primary: #16a34a;
-  --color-primary-hover: #15803d;
-  --color-danger: #dc2626;
-  --color-border: rgba(0,0,0,.1);
-  --color-muted: #6b7280;
-  --color-card: #ffffff;
-  --color-panel: #f9fafb;
-  --color-foreground: #111827;
-  --color-background: #f3f4f6;
-  font-family: system-ui, -apple-system, sans-serif;
-}
+  :root {
+    --color-primary: #16a34a;
+    --color-primary-hover: #15803d;
+    --color-danger: #dc2626;
+    --color-border: rgba(0,0,0,.1);
+    --color-muted: #6b7280;
+    --color-card: #fffaf0;
+    --color-panel: #f9fafb;
+    --color-foreground: #111827;
+    --color-background: #f3f4f6;
+    --font-alfa: 'Alfa Slab One', system-ui, serif;
+    --font-comfortaa: 'Comfortaa', system-ui, -apple-system, sans-serif;
+  }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  min-height: 100dvh;
-}
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    min-height: 100dvh;
+    font-family: var(--font-comfortaa);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-#root {
-  min-height: 100dvh;
+  #root {
+    min-height: 100dvh;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-alfa);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
 }
 
 /* ── Layout ── */
@@ -54,10 +69,11 @@ html, body {
   font-size: .875rem;
   border: 1px solid var(--color-border);
   border-radius: .5rem;
-  background: var(--color-card);
+  background: #ffffff;
   color: var(--color-foreground);
   outline: none;
   transition: border-color .15s;
+  font-family: var(--font-comfortaa);
 }
 .input:focus {
   border-color: var(--color-primary);
@@ -90,6 +106,7 @@ label > span {
   cursor: pointer;
   transition: background .15s, opacity .15s;
   white-space: nowrap;
+  font-family: var(--font-comfortaa);
 }
 .btn:hover:not(:disabled) { background: var(--color-panel); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -162,3 +179,37 @@ label > span {
 .text-danger  { color: var(--color-danger); }
 .border { border: 1px solid var(--color-border); }
 .border-border { border-color: var(--color-border); }
+
+/* ── Skeleton ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-panel) 25%, #e5e7eb 50%, var(--color-panel) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  border-radius: .5rem;
+  min-height: 1rem;
+}
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Tailwind custom overrides ── */
+.bg-card { background-color: var(--color-card) !important; }
+.bg-panel { background-color: var(--color-panel) !important; }
+.border-border { border-color: var(--color-border) !important; }
+.text-muted { color: var(--color-muted) !important; }
+.text-foreground { color: var(--color-foreground) !important; }
+.shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1) !important; }
+
+/* ── Toast animation ── */
+@keyframes toast-in {
+  0% { opacity: 0; transform: scale(.9) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Evita zoom iOS em inputs ── */
+@media (max-width: 600px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
