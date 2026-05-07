@@ -17,6 +17,21 @@ const UNIT_PIXEL_MAP: Record<string, string> = {
   'mané aguas claras': '1160688802149033',
   'mane águas claras': '1160688802149033',
   'mané águas claras': '1160688802149033',
+  sp: '1262593178889667',
+  'sao paulo': '1262593178889667',
+  'são paulo': '1262593178889667',
+  'sao-paulo': '1262593178889667',
+  perdizes: '1262593178889667',
+  'mane perdizes': '1262593178889667',
+  'mané perdizes': '1262593178889667',
+  'mane perdizes sp': '1262593178889667',
+  'mané perdizes sp': '1262593178889667',
+  'mane sao paulo': '1262593178889667',
+  'mané são paulo': '1262593178889667',
+  'mane sp': '1262593178889667',
+  'mané sp': '1262593178889667',
+  'mane-west-plaza-sp': '1262593178889667',
+  'west plaza': '1262593178889667',
 };
 
 const GA4_ID: string = ((import.meta as any)?.env?.VITE_GA4_ID as string | undefined) || '';
@@ -134,6 +149,7 @@ function findPixelForUnit(input?: string | null): string | undefined {
   if (key.includes('bsb') || key.includes('brasilia') || key.includes('brasil')) return UNIT_PIXEL_MAP['brasilia'];
   if (key.includes('aguas') && key.includes('claras')) return UNIT_PIXEL_MAP['aguas claras'];
   if (key.includes('arena') && (key.includes('brasilia') || key.includes('brasil'))) return UNIT_PIXEL_MAP['arena brasilia'];
+  if (key.includes('perdizes') || key.includes('west plaza') || key.includes('sao paulo') || key.includes('são paulo') || key === 'sp' || key.includes(' sp') || key.startsWith('sp ')) return UNIT_PIXEL_MAP['sp'];
   return;
 }
 
