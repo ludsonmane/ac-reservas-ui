@@ -5,6 +5,7 @@ import type { Reservation } from '../types';
 import { useUnits } from './hooks/useUnits';
 import { useAreasByUnit } from './hooks/useAreasByUnit';
 import { toast } from './toast';
+import { DashboardChart, type DashboardChartPoint } from './DashboardChart';
 
 type GroupRow = {
   key: string;
@@ -388,6 +389,29 @@ export default function DashboardPage() {
 
   const lastUpdated = data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString('pt-BR') : '—';
 
+  // Série temporal por dia (BRT) — reservas, check-ins e pessoas
+  const chartData: DashboardChartPoint[] = React.useMemo(() => {
+    if (!items.length) return [];
+    const byDay = new Map<string, DashboardChartPoint>();
+    for (const r of items) {
+      if (!r.reservationDate) continue;
+      const d = new Date(r.reservationDate);
+      if (Number.isNaN(d.getTime())) continue;
+      // converte UTC -> BRT (UTC-3) e pega YYYY-MM-DD
+      const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+      const y = brt.getUTCFullYear();
+      const m = pad2(brt.getUTCMonth() + 1);
+      const dd = pad2(brt.getUTCDate());
+      const key = `${y}-${m}-${dd}`;
+      const row = byDay.get(key) ?? { date: key, label: `${dd}/${m}`, reservas: 0, checkins: 0, pessoas: 0 };
+      row.reservas += 1;
+      if (r.status === 'CHECKED_IN' || !!r.checkedInAt) row.checkins += 1;
+      row.pessoas += Number(r.people ?? 0) + Number(r.kids ?? 0);
+      byDay.set(key, row);
+    }
+    return Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [items]);
+
   return (
     <div className="container mt-4 space-y-4">
       <div className="card">
@@ -492,6 +516,8 @@ export default function DashboardPage() {
           hint={<span className={checkinsSemFaturamento.length > 0 ? 'text-amber-500 font-semibold' : ''}>{checkinsSemFaturamento.length > 0 ? '⚠️ Consultar ZIG' : '✅ Todos faturados'}</span>}
         />
       </div>
+
+      {chartData.length >= 2 && <DashboardChart data={chartData} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <BarList title="Origem (UTM Source)" rows={byOrigin} help="Usa UTM_SOURCE. Soma apenas botmaker + disparo em um único canal." />
