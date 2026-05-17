@@ -231,6 +231,18 @@ export default function DashboardPage() {
     if (!areas.find(a => String(a.id) === String(areaId))) setAreaId('');
   }, [unitId, areas, areaId]);
 
+  // ao trocar o dateField, re-busca do backend (senao a agregacao local
+  // usaria items filtrados pelo campo anterior e os totais ficariam errados)
+  const didFirstLoadRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!didFirstLoadRef.current) {
+      if (data) didFirstLoadRef.current = true;
+      return;
+    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateField]);
+
   async function load() {
     setLoading(true);
     setError(null);
