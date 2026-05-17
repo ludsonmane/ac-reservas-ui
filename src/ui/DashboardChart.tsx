@@ -19,15 +19,23 @@ export type DashboardChartPoint = {
   pessoas: number;
 };
 
-export function DashboardChart({ data }: { data: DashboardChartPoint[] }) {
+export function DashboardChart({
+  data,
+  groupedBy = 'reservationDate',
+}: {
+  data: DashboardChartPoint[];
+  groupedBy?: 'reservationDate' | 'createdAt';
+}) {
   if (data.length < 2) return null;
+
+  const subtitle = groupedBy === 'createdAt'
+    ? 'Agrupado por data de cadastro · Reservas/Check-ins (esq) · Pessoas (dir)'
+    : 'Agrupado por data da reserva · Reservas/Check-ins (esq) · Pessoas (dir)';
 
   return (
     <div className="card">
       <div className="title text-lg">Evolução no período</div>
-      <div className="text-xs text-muted mt-0.5">
-        Reservas e check-ins (eixo esquerdo) · Pessoas (eixo direito)
-      </div>
+      <div className="text-xs text-muted mt-0.5">{subtitle}</div>
       <div className="mt-4" style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
           <ComposedChart data={data} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
@@ -52,6 +60,14 @@ export function DashboardChart({ data }: { data: DashboardChartPoint[] }) {
             <Tooltip
               contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
               labelStyle={{ fontWeight: 600 }}
+              labelFormatter={(label, payload) => {
+                const p = payload?.[0]?.payload as DashboardChartPoint | undefined;
+                if (!p?.date) return String(label);
+                const [y, m, d] = p.date.split('-').map(Number);
+                const dt = new Date(Date.UTC(y, m - 1, d, 12));
+                const wd = dt.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'UTC' });
+                return `${label} — ${wd.charAt(0).toUpperCase()}${wd.slice(1)}`;
+              }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Area

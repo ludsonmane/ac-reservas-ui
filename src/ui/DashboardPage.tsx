@@ -204,6 +204,7 @@ export default function DashboardPage() {
 
   const [fromLocal, setFromLocal] = React.useState<string>('');
   const [toLocal, setToLocal] = React.useState<string>('');
+  const [dateField, setDateField] = React.useState<'reservationDate' | 'createdAt'>('reservationDate');
 
   const [billingFilter, setBillingFilter] = React.useState<'all' | 'sem_faturamento'>('all');
   const [loading, setLoading] = React.useState(false);
@@ -252,6 +253,7 @@ export default function DashboardPage() {
         if (areaId) params.areaId = areaId;
         if (from) params.from = from;
         if (to) params.to = to;
+        params.dateField = dateField;
 
         const qs = new URLSearchParams(params as any).toString();
         const res = await api(`/v1/reservations?${qs}`, { auth: true });
@@ -390,12 +392,14 @@ export default function DashboardPage() {
   const lastUpdated = data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString('pt-BR') : '—';
 
   // Série temporal por dia (BRT) — reservas, check-ins e pessoas
+  // Eixo X usa o mesmo campo do filtro (data da reserva OU data de cadastro)
   const chartData: DashboardChartPoint[] = React.useMemo(() => {
     if (!items.length) return [];
     const byDay = new Map<string, DashboardChartPoint>();
     for (const r of items) {
-      if (!r.reservationDate) continue;
-      const d = new Date(r.reservationDate);
+      const raw = dateField === 'createdAt' ? r.createdAt : r.reservationDate;
+      if (!raw) continue;
+      const d = new Date(raw);
       if (Number.isNaN(d.getTime())) continue;
       // converte UTC -> BRT (UTC-3) e pega YYYY-MM-DD
       const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
@@ -410,7 +414,7 @@ export default function DashboardPage() {
       byDay.set(key, row);
     }
     return Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [items]);
+  }, [items, dateField]);
 
   return (
     <div className="container mt-4 space-y-4">
@@ -427,7 +431,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-3">
           <label>
             <span>Unidade</span>
             <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
@@ -447,6 +451,14 @@ export default function DashboardPage() {
               ))}
             </select>
             {!unitId ? <div className="mt-1 text-[11px] text-muted">Selecione uma unidade para filtrar áreas.</div> : null}
+          </label>
+
+          <label>
+            <span>Filtrar por</span>
+            <select className="select" value={dateField} onChange={(e) => setDateField(e.target.value as any)}>
+              <option value="reservationDate">Data da reserva</option>
+              <option value="createdAt">Data de cadastro</option>
+            </select>
           </label>
 
           <label>
@@ -517,7 +529,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      {chartData.length >= 2 && <DashboardChart data={chartData} />}
+      {chartData.length >= 2 && <DashboardChart data={chartData} groupedBy={dateField} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <BarList title="Origem (UTM Source)" rows={byOrigin} help="Usa UTM_SOURCE. Soma apenas botmaker + disparo em um único canal." />
