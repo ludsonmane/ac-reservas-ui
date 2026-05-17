@@ -431,7 +431,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
           <label>
             <span>Unidade</span>
             <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
@@ -451,14 +451,6 @@ export default function DashboardPage() {
               ))}
             </select>
             {!unitId ? <div className="mt-1 text-[11px] text-muted">Selecione uma unidade para filtrar áreas.</div> : null}
-          </label>
-
-          <label>
-            <span>Filtrar por</span>
-            <select className="select" value={dateField} onChange={(e) => setDateField(e.target.value as any)}>
-              <option value="reservationDate">Data da reserva</option>
-              <option value="createdAt">Data de cadastro</option>
-            </select>
           </label>
 
           <label>
@@ -529,7 +521,13 @@ export default function DashboardPage() {
         />
       </div>
 
-      {chartData.length >= 2 && <DashboardChart data={chartData} groupedBy={dateField} />}
+      {chartData.length >= 2 && (
+        <DashboardChart
+          data={chartData}
+          groupedBy={dateField}
+          onChangeGroupedBy={setDateField}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <BarList title="Origem (UTM Source)" rows={byOrigin} help="Usa UTM_SOURCE. Soma apenas botmaker + disparo em um único canal." />

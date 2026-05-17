@@ -83,6 +83,40 @@
   opacity: .6;
   cursor: not-allowed;
 }
+
+/* ── Selects ── */
+.select {
+  display: block;
+  width: 100%;
+  padding: .45rem 2rem .45rem .75rem;
+  font-size: .875rem;
+  border: 1px solid var(--color-border);
+  border-radius: .5rem;
+  background-color: #ffffff;
+  color: var(--color-foreground);
+  outline: none;
+  transition: border-color .15s;
+  font-family: var(--font-comfortaa);
+  text-decoration: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .65rem center;
+  background-size: 12px 12px;
+}
+.select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(22,163,74,.15);
+}
+.select[disabled] {
+  opacity: .6;
+  cursor: not-allowed;
+}
+.select option {
+  text-decoration: none;
+}
+
 label > span {
   display: block;
   font-size: .75rem;

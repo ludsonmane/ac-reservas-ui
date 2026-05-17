@@ -22,20 +22,37 @@ export type DashboardChartPoint = {
 export function DashboardChart({
   data,
   groupedBy = 'reservationDate',
+  onChangeGroupedBy,
 }: {
   data: DashboardChartPoint[];
   groupedBy?: 'reservationDate' | 'createdAt';
+  onChangeGroupedBy?: (v: 'reservationDate' | 'createdAt') => void;
 }) {
   if (data.length < 2) return null;
 
-  const subtitle = groupedBy === 'createdAt'
-    ? 'Agrupado por data de cadastro · Reservas/Check-ins (esq) · Pessoas (dir)'
-    : 'Agrupado por data da reserva · Reservas/Check-ins (esq) · Pessoas (dir)';
-
   return (
     <div className="card">
-      <div className="title text-lg">Evolução no período</div>
-      <div className="text-xs text-muted mt-0.5">{subtitle}</div>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div>
+          <div className="title text-lg">Evolução no período</div>
+          <div className="text-xs text-muted mt-0.5">
+            Reservas/Check-ins (eixo esquerdo) · Pessoas (eixo direito)
+          </div>
+        </div>
+        {onChangeGroupedBy ? (
+          <label className="shrink-0">
+            <span>Filtrar por</span>
+            <select
+              className="select"
+              value={groupedBy}
+              onChange={(e) => onChangeGroupedBy(e.target.value as 'reservationDate' | 'createdAt')}
+            >
+              <option value="reservationDate">Data da reserva</option>
+              <option value="createdAt">Data de cadastro</option>
+            </select>
+          </label>
+        ) : null}
+      </div>
       <div className="mt-4" style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
           <ComposedChart data={data} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
