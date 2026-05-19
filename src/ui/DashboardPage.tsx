@@ -293,13 +293,17 @@ export default function DashboardPage() {
 
   const items = data?.items ?? [];
   const totalRes = items.length;
-  const totalPeople = items.reduce((s, r) => s + Number(r.people ?? 0), 0);
-  const totalKids = items.reduce((s, r) => s + Number(r.kids ?? 0), 0);
-  const totalPax = totalPeople + totalKids;
-  const checkins = items.filter(r => r.status === 'CHECKED_IN' || !!r.checkedInAt).length;
-  const awaiting = items.filter(r => r.status === 'AWAITING_CHECKIN').length;
-  const avgAdults = totalRes ? Math.round((totalPeople / totalRes) * 10) / 10 : 0;
-  const avgPax = totalRes ? Math.round((totalPax / totalRes) * 10) / 10 : 0;
+
+  // Pessoas, mesas e faturamento só fazem sentido pra quem efetivamente apareceu.
+  // Reservas marcadas mas sem check-in não consumiram nada — não entram nas médias.
+  const checkedInItems = items.filter(r => r.status === 'CHECKED_IN' || !!r.checkedInAt);
+  const checkins = checkedInItems.length;
+  const totalPeople = checkedInItems.reduce((s, r) => s + Number(r.people ?? 0), 0);
+  const totalKids   = checkedInItems.reduce((s, r) => s + Number(r.kids ?? 0), 0);
+  const totalPax    = totalPeople + totalKids;
+  const awaiting    = items.filter(r => r.status === 'AWAITING_CHECKIN').length;
+  const avgAdults   = checkins ? Math.round((totalPeople / checkins) * 10) / 10 : 0;
+  const avgPax      = checkins ? Math.round((totalPax / checkins) * 10) / 10 : 0;
   const checkinRate = pct(checkins, totalRes);
 
   // Checkins sem faturamento ZIG: status CHECKED_IN + tem mesas + sem zigBillingCents
@@ -502,8 +506,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatCard title="Reservas" value={totalRes} hint={<span>Período selecionado</span>} />
         <StatCard title="Check-ins" value={checkins} hint={<span>Taxa: {checkinRate}%</span>} />
-        <StatCard title="Pessoas" value={totalPax} hint={<span>Adultos {totalPeople} • Kids {totalKids}</span>} />
-        <StatCard title="Média por reserva" value={`${avgPax}`} hint={<span>Adultos: {avgAdults}</span>} />
+        <StatCard title="Pessoas (check-in)" value={totalPax} hint={<span>Adultos {totalPeople} • Kids {totalKids}</span>} />
+        <StatCard title="Média por check-in" value={`${avgPax}`} hint={<span>Adultos: {avgAdults}</span>} />
         <StatCard
           title="Botmaker + Disparo"
           value={botmakerDisparoRow?.reservas ?? 0}
