@@ -159,14 +159,13 @@ function BarList({ title, rows, help, limit = 10 }: { title: string; rows: Group
               <th className="w-[160px]">Participação</th>
               <th>Reservas</th>
               <th>Check-ins</th>
-              <th>Taxa</th>
+              <th>Share</th>
               <th>Pessoas</th>
             </tr>
           </thead>
           <tbody>
             {view.map((r) => {
               const share = pct(r.reservas, total);
-              const rate = pct(r.checkins, r.reservas);
               return (
                 <tr key={r.key}>
                   <td className="font-medium">{r.label}</td>
@@ -177,7 +176,7 @@ function BarList({ title, rows, help, limit = 10 }: { title: string; rows: Group
                   </td>
                   <td>{r.reservas}</td>
                   <td>{r.checkins}</td>
-                  <td>{rate}%</td>
+                  <td>{share}%</td>
                   <td>{r.people + r.kids}</td>
                 </tr>
               );
@@ -554,7 +553,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <BarList title="UTM Campaign" rows={byCampaign} help="Campanhas que estão trazendo reservas (com taxa de check-in)." />
+        <BarList title="UTM Campaign" rows={byCampaign} help="Campanhas que estão trazendo reservas (share = participação no total)." />
         <BarList title="UTM Medium" rows={byMedium} help="Mídias: cpc, social, influencer, etc." />
       </div>
 
