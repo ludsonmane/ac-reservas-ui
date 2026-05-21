@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
 } from 'recharts';
 
 export type DashboardChartPoint = {
@@ -63,6 +64,46 @@ export function DashboardChart({
     [displayData],
   );
   const fmt = (n: number) => n.toLocaleString('pt-BR');
+
+  const makeLabel = (color: string, key: 'reservas' | 'checkins' | 'pessoas') =>
+    (props: any) => {
+      const { x, y, value, index } = props;
+      if (typeof x !== 'number' || typeof y !== 'number' || value == null) return null;
+      const curr = Number(value);
+      const prev = index > 0 ? Number(displayData[index - 1]?.[key] ?? 0) : 0;
+      const growth = index > 0 && prev > 0 ? ((curr - prev) / prev) * 100 : null;
+      const growthColor = growth == null ? color : growth >= 0 ? '#059669' : '#dc2626';
+      return (
+        <g>
+          <text
+            x={x}
+            y={y - 14}
+            textAnchor="middle"
+            fontSize={11}
+            fontWeight={600}
+            fill={color}
+            style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round' }}
+          >
+            {fmt(curr)}
+          </text>
+          {growth != null && (
+            <text
+              x={x}
+              y={y - 3}
+              textAnchor="middle"
+              fontSize={10}
+              fontWeight={600}
+              fill={growthColor}
+              style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round' }}
+            >
+              {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(1)}%
+            </text>
+          )}
+        </g>
+      );
+    };
+
+  const showLabels = granularity === 'month';
 
   return (
     <div className="card">
@@ -123,9 +164,9 @@ export function DashboardChart({
           <span>pessoas</span>
         </span>
       </div>
-      <div className="mt-4" style={{ width: '100%', height: 300 }}>
+      <div className="mt-4" style={{ width: '100%', height: showLabels ? 360 : 300 }}>
         <ResponsiveContainer>
-          <ComposedChart data={displayData} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
+          <ComposedChart data={displayData} margin={{ top: showLabels ? 36 : 10, right: 12, left: -8, bottom: 0 }}>
             <defs>
               <linearGradient id="gReservas" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.45} />
@@ -170,7 +211,9 @@ export function DashboardChart({
               stroke="#10b981"
               strokeWidth={2}
               fill="url(#gReservas)"
-            />
+            >
+              {showLabels && <LabelList dataKey="reservas" content={makeLabel('#065f46', 'reservas')} />}
+            </Area>
             <Area
               yAxisId="left"
               type="monotone"
@@ -179,7 +222,9 @@ export function DashboardChart({
               stroke="#3b82f6"
               strokeWidth={2}
               fill="url(#gCheckins)"
-            />
+            >
+              {showLabels && <LabelList dataKey="checkins" content={makeLabel('#1e3a8a', 'checkins')} />}
+            </Area>
             <Area
               yAxisId="right"
               type="monotone"
@@ -188,7 +233,9 @@ export function DashboardChart({
               stroke="#f59e0b"
               strokeWidth={2}
               fill="url(#gPessoas)"
-            />
+            >
+              {showLabels && <LabelList dataKey="pessoas" content={makeLabel('#78350f', 'pessoas')} />}
+            </Area>
           </ComposedChart>
         </ResponsiveContainer>
       </div>
