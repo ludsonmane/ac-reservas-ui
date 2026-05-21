@@ -30,6 +30,40 @@ export function DashboardChart({
 }) {
   if (data.length < 2) return null;
 
+  const [granularity, setGranularity] = React.useState<'day' | 'month'>('day');
+
+  const displayData = React.useMemo<DashboardChartPoint[]>(() => {
+    if (granularity === 'day') return data;
+    const byMonth = new Map<string, DashboardChartPoint>();
+    for (const p of data) {
+      const key = p.date.slice(0, 7); // YYYY-MM
+      const [yyyy, mm] = key.split('-');
+      const label = `${mm}/${yyyy.slice(2)}`;
+      const row =
+        byMonth.get(key) ??
+        { date: `${key}-01`, label, reservas: 0, checkins: 0, pessoas: 0 };
+      row.reservas += p.reservas;
+      row.checkins += p.checkins;
+      row.pessoas += p.pessoas;
+      byMonth.set(key, row);
+    }
+    return Array.from(byMonth.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [data, granularity]);
+
+  const totals = React.useMemo(
+    () =>
+      displayData.reduce(
+        (acc, p) => ({
+          reservas: acc.reservas + (p.reservas || 0),
+          checkins: acc.checkins + (p.checkins || 0),
+          pessoas: acc.pessoas + (p.pessoas || 0),
+        }),
+        { reservas: 0, checkins: 0, pessoas: 0 },
+      ),
+    [displayData],
+  );
+  const fmt = (n: number) => n.toLocaleString('pt-BR');
+
   return (
     <div className="card">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
@@ -39,23 +73,59 @@ export function DashboardChart({
             Reservas/Check-ins (eixo esquerdo) · Pessoas (eixo direito)
           </div>
         </div>
-        {onChangeGroupedBy ? (
+        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
           <label className="shrink-0">
-            <span>Filtrar por</span>
+            <span>Granularidade</span>
             <select
               className="select"
-              value={groupedBy}
-              onChange={(e) => onChangeGroupedBy(e.target.value as 'reservationDate' | 'createdAt')}
+              value={granularity}
+              onChange={(e) => setGranularity(e.target.value as 'day' | 'month')}
             >
-              <option value="reservationDate">Data da reserva</option>
-              <option value="createdAt">Data de cadastro</option>
+              <option value="day">Dia a dia</option>
+              <option value="month">Mês a mês</option>
             </select>
           </label>
-        ) : null}
+          {onChangeGroupedBy ? (
+            <label className="shrink-0">
+              <span>Filtrar por</span>
+              <select
+                className="select"
+                value={groupedBy}
+                onChange={(e) => onChangeGroupedBy(e.target.value as 'reservationDate' | 'createdAt')}
+              >
+                <option value="reservationDate">Data da reserva</option>
+                <option value="createdAt">Data de cadastro</option>
+              </select>
+            </label>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span
+          className="inline-flex items-baseline gap-1 rounded-md px-2 py-1"
+          style={{ background: 'rgba(16,185,129,0.10)', color: '#065f46' }}
+        >
+          <span className="font-semibold tabular-nums">{fmt(totals.reservas)}</span>
+          <span>reservas</span>
+        </span>
+        <span
+          className="inline-flex items-baseline gap-1 rounded-md px-2 py-1"
+          style={{ background: 'rgba(59,130,246,0.10)', color: '#1e3a8a' }}
+        >
+          <span className="font-semibold tabular-nums">{fmt(totals.checkins)}</span>
+          <span>check-ins</span>
+        </span>
+        <span
+          className="inline-flex items-baseline gap-1 rounded-md px-2 py-1"
+          style={{ background: 'rgba(245,158,11,0.10)', color: '#78350f' }}
+        >
+          <span className="font-semibold tabular-nums">{fmt(totals.pessoas)}</span>
+          <span>pessoas</span>
+        </span>
       </div>
       <div className="mt-4" style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <ComposedChart data={data} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
+          <ComposedChart data={displayData} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
             <defs>
               <linearGradient id="gReservas" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.45} />
@@ -81,6 +151,11 @@ export function DashboardChart({
                 const p = payload?.[0]?.payload as DashboardChartPoint | undefined;
                 if (!p?.date) return String(label);
                 const [y, m, d] = p.date.split('-').map(Number);
+                if (granularity === 'month') {
+                  const dt = new Date(Date.UTC(y, m - 1, 1, 12));
+                  const mn = dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+                  return mn.charAt(0).toUpperCase() + mn.slice(1);
+                }
                 const dt = new Date(Date.UTC(y, m - 1, d, 12));
                 const wd = dt.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'UTC' });
                 return `${label} — ${wd.charAt(0).toUpperCase()}${wd.slice(1)}`;

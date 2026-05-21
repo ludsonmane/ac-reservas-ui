@@ -354,9 +354,12 @@ export default function DashboardPage() {
     : '—';
 
   // Nº total de mesas faturadas no período
+  // "Faturada" = reserva CHECKED_IN com billing > 0 (literal). Mesa em reserva
+  // com R$ 0,00 não conta — foi processada mas não teve consumo.
   const zigTotalMesas = React.useMemo(() => items.filter(r =>
     r.status === 'CHECKED_IN' &&
     (r as any).zigBillingCents != null &&
+    (r as any).zigBillingCents > 0 &&
     r.tables?.trim()
   ).reduce((s, r) => s + r.tables!.split(',').filter(Boolean).length, 0), [items]);
 
