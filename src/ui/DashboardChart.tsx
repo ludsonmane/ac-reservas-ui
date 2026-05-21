@@ -9,7 +9,6 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  LabelList,
 } from 'recharts';
 
 export type DashboardChartPoint = {
@@ -65,45 +64,12 @@ export function DashboardChart({
   );
   const fmt = (n: number) => n.toLocaleString('pt-BR');
 
-  const makeLabel = (color: string, key: 'reservas' | 'checkins' | 'pessoas') =>
-    (props: any) => {
-      const { x, y, value, index } = props;
-      if (typeof x !== 'number' || typeof y !== 'number' || value == null) return null;
-      const curr = Number(value);
-      const prev = index > 0 ? Number(displayData[index - 1]?.[key] ?? 0) : 0;
-      const growth = index > 0 && prev > 0 ? ((curr - prev) / prev) * 100 : null;
-      const growthColor = growth == null ? color : growth >= 0 ? '#059669' : '#dc2626';
-      return (
-        <g>
-          <text
-            x={x}
-            y={y - 14}
-            textAnchor="middle"
-            fontSize={11}
-            fontWeight={600}
-            fill={color}
-            style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round' }}
-          >
-            {fmt(curr)}
-          </text>
-          {growth != null && (
-            <text
-              x={x}
-              y={y - 3}
-              textAnchor="middle"
-              fontSize={10}
-              fontWeight={600}
-              fill={growthColor}
-              style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round' }}
-            >
-              {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(1)}%
-            </text>
-          )}
-        </g>
-      );
-    };
-
-  const showLabels = granularity === 'month';
+  const showMonthlyTable = granularity === 'month';
+  const seriesRows = [
+    { key: 'reservas' as const, name: 'Reservas', color: '#065f46', bg: 'rgba(16,185,129,0.10)' },
+    { key: 'checkins' as const, name: 'Check-ins', color: '#1e3a8a', bg: 'rgba(59,130,246,0.10)' },
+    { key: 'pessoas' as const, name: 'Pessoas', color: '#78350f', bg: 'rgba(245,158,11,0.10)' },
+  ];
 
   return (
     <div className="card">
@@ -164,9 +130,9 @@ export function DashboardChart({
           <span>pessoas</span>
         </span>
       </div>
-      <div className="mt-4" style={{ width: '100%', height: showLabels ? 360 : 300 }}>
+      <div className="mt-4" style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <ComposedChart data={displayData} margin={{ top: showLabels ? 36 : 10, right: 12, left: -8, bottom: 0 }}>
+          <ComposedChart data={displayData} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
             <defs>
               <linearGradient id="gReservas" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.45} />
@@ -211,9 +177,7 @@ export function DashboardChart({
               stroke="#10b981"
               strokeWidth={2}
               fill="url(#gReservas)"
-            >
-              {showLabels && <LabelList dataKey="reservas" content={makeLabel('#065f46', 'reservas')} />}
-            </Area>
+            />
             <Area
               yAxisId="left"
               type="monotone"
@@ -222,9 +186,7 @@ export function DashboardChart({
               stroke="#3b82f6"
               strokeWidth={2}
               fill="url(#gCheckins)"
-            >
-              {showLabels && <LabelList dataKey="checkins" content={makeLabel('#1e3a8a', 'checkins')} />}
-            </Area>
+            />
             <Area
               yAxisId="right"
               type="monotone"
@@ -233,12 +195,65 @@ export function DashboardChart({
               stroke="#f59e0b"
               strokeWidth={2}
               fill="url(#gPessoas)"
-            >
-              {showLabels && <LabelList dataKey="pessoas" content={makeLabel('#78350f', 'pessoas')} />}
-            </Area>
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {showMonthlyTable && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-xs border-separate" style={{ borderSpacing: 2 }}>
+            <thead>
+              <tr>
+                <th className="text-left p-1 text-muted font-medium">Mês</th>
+                {displayData.map((p) => (
+                  <th key={p.date} className="p-1 text-center font-semibold tabular-nums">
+                    {p.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {seriesRows.map(({ key, name, color, bg }) => (
+                <tr key={key}>
+                  <td className="p-1 font-semibold whitespace-nowrap" style={{ color }}>
+                    <span
+                      className="inline-block align-middle mr-1"
+                      style={{ width: 8, height: 8, borderRadius: 9999, background: color }}
+                    />
+                    {name}
+                  </td>
+                  {displayData.map((p, i) => {
+                    const curr = Number(p[key] ?? 0);
+                    const prev = i > 0 ? Number(displayData[i - 1]?.[key] ?? 0) : 0;
+                    const growth = i > 0 && prev > 0 ? ((curr - prev) / prev) * 100 : null;
+                    return (
+                      <td
+                        key={p.date}
+                        className="p-1 text-center rounded"
+                        style={{ background: bg }}
+                      >
+                        <div className="font-semibold tabular-nums" style={{ color }}>
+                          {fmt(curr)}
+                        </div>
+                        {growth != null ? (
+                          <div
+                            className="text-[10px] font-semibold tabular-nums"
+                            style={{ color: growth >= 0 ? '#059669' : '#dc2626' }}
+                          >
+                            {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(1)}%
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-muted">—</div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
