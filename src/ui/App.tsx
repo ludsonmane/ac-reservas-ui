@@ -18,7 +18,16 @@ import CheckinPage from './CheckinPage';
 import DashboardPage from './DashboardPage';
 import LogsPage from './LogsPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
-import { createBlock, updateBlock, deleteBlock } from './hooks/useBlocks';
+import {
+  createBlock,
+  updateBlock,
+  deleteBlock,
+  listRecurringBlocks,
+  createRecurringBlock,
+  updateRecurringBlock,
+  deleteRecurringBlock,
+  type RecurringBlock,
+} from './hooks/useBlocks';
 
 
 
@@ -519,8 +528,503 @@ function reservationTypeLabel(raw?: string | null) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
+/* ---------- Sub-painel: Regras recorrentes (DOW) ---------- */
+const DOW_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+const DOW_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function RecurringBlocksSection() {
+  const { units, loading: loadingUnits } = useUnits(true);
+
+  const [form, setForm] = useState<{
+    unitId: string;
+    dows: number[];
+    fromTime: string;
+    toTime: string;
+    scope: 'ALL' | 'AREA';
+    areaIds: string[];
+    reason: string;
+  }>({
+    unitId: '',
+    dows: [],
+    fromTime: '13:00',
+    toTime: '23:59',
+    scope: 'ALL',
+    areaIds: [],
+    reason: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [items, setItems] = useState<RecurringBlock[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [editing, setEditing] = useState<RecurringBlock | null>(null);
+  const [editForm, setEditForm] = useState<{
+    dow: number;
+    fromTime: string;
+    toTime: string;
+    scope: 'ALL' | 'AREA';
+    areaId: string;
+    reason: string;
+  }>({ dow: 0, fromTime: '13:00', toTime: '23:59', scope: 'ALL', areaId: '', reason: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const areasByUnit = useAreasByUnit(form.unitId || undefined, !!form.unitId);
+  const editAreasByUnit = useAreasByUnit(
+    editing?.unitId || undefined,
+    !!editing,
+  );
+
+  function setField<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
+    setForm((p) => ({ ...p, [k]: v }));
+  }
+
+  function toggleDow(d: number) {
+    setForm((p) => ({
+      ...p,
+      dows: p.dows.includes(d) ? p.dows.filter((x) => x !== d) : [...p.dows, d].sort(),
+    }));
+  }
+
+  async function load() {
+    try {
+      setLoading(true);
+      const data = await listRecurringBlocks(form.unitId ? { unitId: form.unitId } : undefined);
+      setItems(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.error?.message || e?.message || 'Erro ao carregar regras recorrentes.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.unitId]);
+
+  const canSubmit =
+    !!form.unitId &&
+    form.dows.length > 0 &&
+    !!form.fromTime &&
+    !!form.toTime &&
+    form.fromTime < form.toTime &&
+    (form.scope === 'ALL' || form.areaIds.length > 0);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit || saving) return;
+    try {
+      setSaving(true);
+      // Em ALL escopo: 1 regra com areaId=null. Em AREA: 1 regra por área.
+      const areaTargets: (string | null)[] =
+        form.scope === 'ALL' ? [null] : form.areaIds;
+      // cria uma regra por (DOW × Área)
+      const combos = form.dows.flatMap((dow) =>
+        areaTargets.map((areaId) => ({ dow, areaId })),
+      );
+      await Promise.all(
+        combos.map(({ dow, areaId }) =>
+          createRecurringBlock({
+            unitId: form.unitId,
+            dow,
+            fromTime: form.fromTime,
+            toTime: form.toTime,
+            areaId,
+            reason: form.reason || null,
+          }),
+        ),
+      );
+      toast.success(`${combos.length} regra(s) criada(s).`);
+      setForm((p) => ({ ...p, dows: [], areaIds: [], reason: '' }));
+      await load();
+    } catch (e: any) {
+      toast.error(e?.error?.message || e?.message || 'Erro ao criar regra recorrente.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEdit(b: RecurringBlock) {
+    setEditing(b);
+    setEditForm({
+      dow: b.dow,
+      fromTime: b.fromTime,
+      toTime: b.toTime,
+      scope: b.areaId ? 'AREA' : 'ALL',
+      areaId: b.areaId || '',
+      reason: b.reason || '',
+    });
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setSavingEdit(false);
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing || savingEdit) return;
+    if (editForm.fromTime >= editForm.toTime) {
+      toast.error('Hora início deve ser menor que hora fim.');
+      return;
+    }
+    try {
+      setSavingEdit(true);
+      await updateRecurringBlock(editing.id, {
+        dow: editForm.dow,
+        fromTime: editForm.fromTime,
+        toTime: editForm.toTime,
+        areaId: editForm.scope === 'ALL' ? null : editForm.areaId || null,
+        reason: editForm.reason || null,
+      });
+      toast.success('Regra atualizada.');
+      closeEdit();
+      await load();
+    } catch (e: any) {
+      toast.error(e?.error?.message || e?.message || 'Erro ao atualizar regra.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Excluir esta regra recorrente?')) return;
+    try {
+      setDeletingId(id);
+      await deleteRecurringBlock(id);
+      toast.success('Regra removida.');
+      setItems((prev) => prev.filter((x) => x.id !== id));
+    } catch (e: any) {
+      toast.error(e?.error?.message || e?.message || 'Erro ao excluir.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="card mt-4">
+      <div className="flex flex-col gap-1 mb-3">
+        <h2 className="text-xl font-medium m-0" style={{ fontFamily: 'var(--font-comfortaa)' }}>
+          Regras recorrentes (dia da semana)
+        </h2>
+        <p className="text-sm text-muted max-w-2xl">
+          Bloqueia faixas de horário que se repetem toda semana — por exemplo,
+          em Brasília sáb/dom só liberar 12h (bloquear 13:00 em diante).
+        </p>
+      </div>
+
+      <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl">
+        <label className="md:col-span-2">
+          <span>Unidade*</span>
+          <select
+            className="input py-2"
+            value={form.unitId}
+            onChange={(e) => setField('unitId', e.target.value)}
+            disabled={loadingUnits || saving}
+          >
+            <option value="">{loadingUnits ? 'Carregando unidades...' : 'Selecione a unidade'}</option>
+            {(units as any[]).map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="md:col-span-2">
+          <span className="block mb-1">Dias da semana*</span>
+          <div className="flex flex-wrap gap-2">
+            {DOW_SHORT.map((label, i) => {
+              const on = form.dows.includes(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => toggleDow(i)}
+                  disabled={saving}
+                  className={[
+                    'px-3 py-1.5 rounded-md border text-sm transition-colors',
+                    on
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-white border-border hover:bg-panel',
+                  ].join(' ')}
+                  title={DOW_LABEL[i]}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted mt-1">
+            Marque um ou mais dias. Cada dia vira uma regra separada (fica fácil editar/excluir depois).
+          </p>
+        </div>
+
+        <label>
+          <span>Hora início (inclusive)*</span>
+          <input
+            type="time"
+            className="input py-2"
+            value={form.fromTime}
+            onChange={(e) => setField('fromTime', e.target.value)}
+            disabled={saving}
+          />
+        </label>
+
+        <label>
+          <span>Hora fim (exclusive)*</span>
+          <input
+            type="time"
+            className="input py-2"
+            value={form.toTime}
+            onChange={(e) => setField('toTime', e.target.value)}
+            disabled={saving}
+          />
+        </label>
+
+        <label>
+          <span>Escopo*</span>
+          <select
+            className="input py-2"
+            value={form.scope}
+            onChange={(e) => setField('scope', e.target.value as any)}
+            disabled={saving}
+          >
+            <option value="ALL">Todas as áreas da unidade</option>
+            <option value="AREA">Áreas específicas</option>
+          </select>
+        </label>
+
+        <div>
+          <span className="block mb-1">Áreas</span>
+          {form.scope === 'ALL' ? (
+            <p className="text-xs text-muted py-2">Aplica em todas as áreas da unidade.</p>
+          ) : !form.unitId ? (
+            <p className="text-xs text-muted py-2">Selecione a unidade primeiro.</p>
+          ) : areasByUnit.loading ? (
+            <p className="text-xs text-muted py-2">Carregando áreas…</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {((areasByUnit.data ?? []) as any[]).map((a: any) => {
+                  const on = form.areaIds.includes(a.id);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() =>
+                        setForm((p) => ({
+                          ...p,
+                          areaIds: on
+                            ? p.areaIds.filter((x) => x !== a.id)
+                            : [...p.areaIds, a.id],
+                        }))
+                      }
+                      disabled={saving}
+                      className={[
+                        'px-3 py-1.5 rounded-full border text-sm transition-colors inline-flex items-center gap-1.5',
+                        on
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white border-border hover:bg-panel',
+                      ].join(' ')}
+                    >
+                      {on && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                      {a.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted mt-1">
+                Marque uma ou mais áreas. Cada área vira uma regra separada.
+              </p>
+            </>
+          )}
+        </div>
+
+        <label className="md:col-span-2">
+          <span>Motivo</span>
+          <input
+            className="input py-2"
+            placeholder="Ex.: Almoço somente — fim de semana"
+            value={form.reason}
+            onChange={(e) => setField('reason', e.target.value)}
+            disabled={saving}
+          />
+        </label>
+
+        <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+          <button type="submit" className="btn btn-primary" disabled={!canSubmit || saving}>
+            {saving ? 'Criando…' : 'Criar regra'}
+          </button>
+        </div>
+      </form>
+
+      <div className="mt-6">
+        <h3 className="font-medium mb-2 text-sm m-0" style={{ fontFamily: 'var(--font-comfortaa)' }}>Regras cadastradas</h3>
+
+        {loading ? (
+          <p className="text-sm text-muted">Carregando regras…</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted">
+            Nenhuma regra recorrente cadastrada para o filtro atual.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse min-w-[640px]">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="py-1 pr-2">Dia</th>
+                  <th className="py-1 px-2">De</th>
+                  <th className="py-1 px-2">Até</th>
+                  <th className="py-1 px-2">Unidade</th>
+                  <th className="py-1 px-2">Área</th>
+                  <th className="py-1 px-2">Motivo</th>
+                  <th className="py-1 px-2 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((b) => (
+                  <tr key={b.id} className="border-b border-border/60">
+                    <td className="py-1 pr-2">{DOW_LABEL[b.dow] ?? `DOW ${b.dow}`}</td>
+                    <td className="py-1 px-2">{b.fromTime}</td>
+                    <td className="py-1 px-2">{b.toTime}</td>
+                    <td className="py-1 px-2">{b.unitName ?? b.unitId}</td>
+                    <td className="py-1 px-2">{b.areaName ?? (b.areaId ? b.areaId : 'Todas')}</td>
+                    <td className="py-1 px-2 max-w-xs truncate" title={b.reason ?? ''}>
+                      {b.reason ?? '—'}
+                    </td>
+                    <td className="py-1 px-2 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <IconBtn title="Editar regra" onClick={() => openEdit(b)} disabled={savingEdit || deletingId === b.id}>
+                          <PencilIcon />
+                        </IconBtn>
+                        <IconBtn
+                          title={deletingId === b.id ? 'Removendo…' : 'Excluir regra'}
+                          danger
+                          onClick={() => handleDelete(b.id)}
+                          disabled={deletingId === b.id}
+                        >
+                          <TrashIcon />
+                        </IconBtn>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal edição */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-lg mx-4 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-lg m-0" style={{ fontFamily: 'var(--font-comfortaa)' }}>Editar regra recorrente</h3>
+              <button type="button" className="text-sm text-muted hover:text-foreground" onClick={closeEdit} disabled={savingEdit}>✕</button>
+            </div>
+
+            <form onSubmit={handleEditSave} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="md:col-span-2">
+                <span>Dia da semana</span>
+                <select
+                  className="input py-2"
+                  value={editForm.dow}
+                  onChange={(e) => setEditForm((p) => ({ ...p, dow: Number(e.target.value) }))}
+                  disabled={savingEdit}
+                >
+                  {DOW_LABEL.map((l, i) => (
+                    <option key={i} value={i}>{l}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Hora início</span>
+                <input
+                  type="time"
+                  className="input py-2"
+                  value={editForm.fromTime}
+                  onChange={(e) => setEditForm((p) => ({ ...p, fromTime: e.target.value }))}
+                  disabled={savingEdit}
+                />
+              </label>
+
+              <label>
+                <span>Hora fim</span>
+                <input
+                  type="time"
+                  className="input py-2"
+                  value={editForm.toTime}
+                  onChange={(e) => setEditForm((p) => ({ ...p, toTime: e.target.value }))}
+                  disabled={savingEdit}
+                />
+              </label>
+
+              <label>
+                <span>Escopo</span>
+                <select
+                  className="input py-2"
+                  value={editForm.scope}
+                  onChange={(e) => setEditForm((p) => ({ ...p, scope: e.target.value as any }))}
+                  disabled={savingEdit}
+                >
+                  <option value="ALL">Todas as áreas</option>
+                  <option value="AREA">Área específica</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Área</span>
+                <select
+                  className="input py-2"
+                  value={editForm.areaId}
+                  onChange={(e) => setEditForm((p) => ({ ...p, areaId: e.target.value }))}
+                  disabled={editForm.scope === 'ALL' || editAreasByUnit.loading || savingEdit}
+                >
+                  <option value="">
+                    {editAreasByUnit.loading ? 'Carregando áreas...' : 'Selecione a área'}
+                  </option>
+                  {(editAreasByUnit.data ?? []).map((a: any) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="md:col-span-2">
+                <span>Motivo</span>
+                <input
+                  className="input py-2"
+                  value={editForm.reason}
+                  onChange={(e) => setEditForm((p) => ({ ...p, reason: e.target.value }))}
+                  disabled={savingEdit}
+                />
+              </label>
+
+              <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+                <button type="button" className="btn btn-ghost" onClick={closeEdit} disabled={savingEdit}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={savingEdit}>
+                  {savingEdit ? 'Salvando…' : 'Salvar alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Painel: Bloquear Reservas ---------- */
 function BlockReservationsPanel() {
+  const [subTab, setSubTab] = useState<'recurring' | 'date'>('recurring');
+
   const [form, setForm] = useState<{
     unitId: string;
     date: string;
@@ -774,12 +1278,41 @@ function BlockReservationsPanel() {
 
   return (
     <section className="container mt-4">
+      {/* Sub-tabs */}
+      <div className="mb-3 inline-flex gap-1 p-1 rounded-xl border border-border bg-card/70">
+        {([
+          { key: 'recurring', label: 'Regras recorrentes' },
+          { key: 'date', label: 'Por data específica' },
+        ] as const).map((t) => {
+          const isActive = subTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setSubTab(t.key)}
+              className={[
+                'px-4 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-white text-emerald-700 shadow-sm'
+                  : 'text-muted hover:text-foreground hover:bg-panel',
+              ].join(' ')}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {subTab === 'recurring' && <RecurringBlocksSection />}
+
+      {subTab === 'date' && (
+      <>
       <div className="card">
         <div className="flex flex-col gap-1 mb-3">
-          <h2 className="title text-2xl">Bloquear reservas</h2>
+          <h2 className="title text-2xl">Bloquear por data específica</h2>
           <p className="text-sm text-muted max-w-2xl">
-            Use esta tela para marcar dias ou períodos específicos como indisponíveis
-            para novas reservas. Isso afeta tanto o site público quanto o fluxo interno.
+            Marque dias pontuais como indisponíveis (ex.: feriados, confraternização interna).
+            Pra bloqueios que se repetem toda semana, use a aba "Regras recorrentes".
           </p>
         </div>
 
@@ -1125,6 +1658,8 @@ function BlockReservationsPanel() {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
     </section>
   );
