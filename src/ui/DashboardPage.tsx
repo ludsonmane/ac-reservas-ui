@@ -552,6 +552,45 @@ export default function DashboardPage() {
         />
       </div>
 
+      <details className="card">
+        <summary className="cursor-pointer select-none font-semibold text-base flex items-center gap-2">
+          <span>📊 Como calculamos o faturamento por reserva</span>
+          <span className="text-xs text-muted font-normal">(clique pra expandir)</span>
+        </summary>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm leading-relaxed">
+          <div>
+            <div className="font-medium mb-1.5">🎯 Fonte: API Manezin (canônica)</div>
+            <p className="text-muted">
+              Lemos direto da API Manezin (Rocha Solution), que é a fonte original do ZIG.
+              Antes usávamos um MySQL espelho com cron de sincronização quebrado — perdia ~75%
+              dos jantares (zerados no dashboard). Trocamos pela fonte direta em 2026-05.
+            </p>
+          </div>
+
+          <div>
+            <div className="font-medium mb-1.5">⏱️ Como casamos vendas com a reserva</div>
+            <ul className="text-muted space-y-1 list-disc pl-5">
+              <li><b>Pivot</b> = 1ª venda na mesa depois do horário da reserva (aceita até 8h de atraso).</li>
+              <li><b>Janela base</b> = 4h a partir do pivot.</li>
+              <li><b>Estende</b> além das 4h enquanto o mesmo cliente (chip NFC) continua consumindo sem silêncio.</li>
+              <li><b>Encerra</b> quando aparece um chip <i>novo</i> após silêncio &gt; 60min — sinal de que a próxima reserva sentou.</li>
+              <li><b>Exclui</b> transações estornadas (<code>isRefunded</code>).</li>
+            </ul>
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="font-medium mb-1.5">✅ Por que é o mais preciso que temos hoje</div>
+            <p className="text-muted">
+              Usamos a <b>identidade do cliente</b> (chip NFC da pulseirinha) — não chutamos só por janela cega de tempo.
+              Isso evita os dois erros mais comuns: <b>(1)</b> cortar cedo demais uma cauda legítima do mesmo cliente que
+              continuou bebendo depois das 4h; e <b>(2)</b> contar demais incluindo walk-ins ou a próxima reserva que
+              sentou na mesma mesa. <b>Ticket médio por reserva</b> = Faturamento ZIG ÷ reservas com consumo confirmado
+              (R$ 0,00 não conta — pode ser mesa cadastrada errada ou reserva onde o cliente não consumiu).
+            </p>
+          </div>
+        </div>
+      </details>
+
       {chartData.length >= 2 && (
         <DashboardChart
           data={chartData}
