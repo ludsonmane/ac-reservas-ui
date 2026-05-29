@@ -122,10 +122,21 @@ function topN<T>(arr: T[], n: number) {
   return arr.slice(0, Math.max(0, n));
 }
 
-function StatCard({ title, value, hint }: { title: string; value: React.ReactNode; hint?: React.ReactNode }) {
+function StatCard({ title, value, hint, tooltip }: { title: string; value: React.ReactNode; hint?: React.ReactNode; tooltip?: string }) {
   return (
     <div className="card">
-      <div className="text-xs uppercase tracking-wide text-muted">{title}</div>
+      <div className="text-xs uppercase tracking-wide text-muted flex items-center gap-1">
+        <span>{title}</span>
+        {tooltip ? (
+          <span
+            title={tooltip}
+            className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-current text-[10px] leading-none cursor-help opacity-60 hover:opacity-100"
+            aria-label="Info"
+          >
+            ?
+          </span>
+        ) : null}
+      </div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
       {hint ? <div className="mt-1 text-xs text-muted">{hint}</div> : null}
     </div>
@@ -332,35 +343,21 @@ export default function DashboardPage() {
   );
   const zigTotalBRL = (zigTotalCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  // Faturamento médio por mesa: soma de (zigBillingCents / nº de mesas) por reserva
-  const zigAvgPerTableCents = React.useMemo(() => {
-    const billed = items.filter(r =>
-      r.status === 'CHECKED_IN' &&
-      (r as any).zigBillingCents != null &&
-      (r as any).zigBillingCents > 0 &&
-      r.tables?.trim()
-    );
-    if (!billed.length) return 0;
-    const totalMesas = billed.reduce((s, r) => {
-      const n = r.tables!.split(',').filter(Boolean).length;
-      return s + (n || 1);
-    }, 0);
-    return Math.round(zigTotalCents / totalMesas);
-  }, [items, zigTotalCents]);
-
-  const zigAvgPerTableBRL = zigAvgPerTableCents > 0
-    ? (zigAvgPerTableCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    : '—';
-
-  // Nº total de mesas faturadas no período
-  // "Faturada" = reserva CHECKED_IN com billing > 0 (literal). Mesa em reserva
-  // com R$ 0,00 não conta — foi processada mas não teve consumo.
-  const zigTotalMesas = React.useMemo(() => items.filter(r =>
+  // Ticket médio por reserva: zigTotalCents / nº de reservas faturadas
+  // "Faturada" = CHECKED_IN com billing > 0 (literal). R$ 0,00 não conta.
+  const zigReservasFaturadas = React.useMemo(() => items.filter(r =>
     r.status === 'CHECKED_IN' &&
     (r as any).zigBillingCents != null &&
-    (r as any).zigBillingCents > 0 &&
-    r.tables?.trim()
-  ).reduce((s, r) => s + r.tables!.split(',').filter(Boolean).length, 0), [items]);
+    (r as any).zigBillingCents > 0
+  ).length, [items]);
+
+  const zigTicketMedioReservaCents = zigReservasFaturadas > 0
+    ? Math.round(zigTotalCents / zigReservasFaturadas)
+    : 0;
+
+  const zigTicketMedioReservaBRL = zigTicketMedioReservaCents > 0
+    ? (zigTicketMedioReservaCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : '—';
 
   // Aplica filtro de billing
   const filteredItems = React.useMemo(() => {
@@ -526,11 +523,27 @@ export default function DashboardPage() {
           title="Faturamento ZIG"
           value={zigTotalCents > 0 ? zigTotalBRL : '—'}
           hint={<span>Total registrado no período</span>}
+          tooltip={
+            'Soma do consumo das mesas das reservas com check-in confirmado.\n\n' +
+            'Fonte: API Manezin (canônica, sem intermediários — substitui o MySQL ZIG Full que tinha sync quebrado).\n\n' +
+            'Regra de match por reserva:\n' +
+            '• Pivot = 1ª venda na mesa após o horário da reserva (até 8h de atraso).\n' +
+            '• Janela 4h a partir do pivot.\n' +
+            '• Estende além das 4h enquanto o mesmo cliente (chip NFC) continua consumindo sem silêncio.\n' +
+            '• Encerra quando aparece um chip novo após silêncio > 60min (= próxima reserva sentou).\n' +
+            '• Exclui transações estornadas (refund).\n\n' +
+            'É o cálculo mais preciso que temos hoje porque usa a identidade do cliente (chip NFC), não chuta só por tempo.'
+          }
         />
         <StatCard
-          title="Média por mesa"
-          value={zigAvgPerTableBRL}
-          hint={<span>{zigTotalMesas} {zigTotalMesas === 1 ? 'mesa' : 'mesas'} faturadas</span>}
+          title="Ticket médio por reserva"
+          value={zigTicketMedioReservaBRL}
+          hint={<span>{zigReservasFaturadas} {zigReservasFaturadas === 1 ? 'reserva faturada' : 'reservas faturadas'}</span>}
+          tooltip={
+            'Faturamento ZIG total ÷ número de reservas com consumo confirmado (> R$ 0).\n\n' +
+            'Reservas com R$ 0,00 (cliente foi mas não consumiu, ou mesa cadastrada errada) não entram na média.\n\n' +
+            'Usa a mesma metodologia do Faturamento ZIG: fonte Manezin canônica, match por pivot + chip NFC, refunds excluídos. Veja o tooltip de Faturamento ZIG pra detalhes.'
+          }
         />
         <StatCard
           title="Checkins sem faturamento"
