@@ -280,6 +280,16 @@ const NoShowIcon = () => (
     <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6" /><path d="M9 9l6 6" />
   </svg>
 );
+const CancelIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-hidden="true" className="block">
+    <circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" />
+  </svg>
+);
+const UndoIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-hidden="true" className="block">
+    <path d="M3 7v6h6" /><path d="M3 13a9 9 0 1 0 3-7.7L3 8" />
+  </svg>
+);
 
 /* ---------- Modal de Consulta ---------- */
 function ConsultModal({
@@ -1851,6 +1861,7 @@ function ReservationsTable({
   }, [data, unitsById]);
 
   const [renewTarget, setRenewTarget] = React.useState<Reservation | null>(null);
+  const [cancelTarget, setCancelTarget] = React.useState<Reservation | null>(null);
   const [noShowLoading, setNoShowLoading] = React.useState<string | null>(null);
 
   async function handleNoShow(r: Reservation) {
@@ -1997,8 +2008,9 @@ function ReservationsTable({
           {!loading && (
             <tbody>
               {data.items.map((r: Reservation) => {
-                const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : r.status === 'NO_SHOW' ? 'badge-noshow' : 'badge-wait';
+                const statusClass = r.status === 'CHECKED_IN' ? 'badge-ok' : r.status === 'NO_SHOW' ? 'badge-noshow' : r.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-wait';
                 const isNoShow = r.status === 'NO_SHOW';
+                const isCancelled = r.status === 'CANCELLED';
                 const when = new Date(r.reservationDate).toLocaleString('pt-BR');
 
                 const unitLabel =
@@ -2100,7 +2112,7 @@ function ReservationsTable({
                           title={isNoShow ? "Desmarcar No Show" : "Marcar No Show"}
                           danger={!isNoShow}
                           onClick={() => handleNoShow(r)}
-                          disabled={noShowLoading === r.id || r.status === 'CHECKED_IN'}
+                          disabled={noShowLoading === r.id || r.status === 'CHECKED_IN' || isCancelled}
                         >
                           {isNoShow ? (
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-hidden="true" className="block">
@@ -2109,6 +2121,13 @@ function ReservationsTable({
                           ) : (
                             <NoShowIcon />
                           )}
+                        </IconBtn>
+                        <IconBtn
+                          title={isCancelled ? "Reativar reserva" : "Cancelar reserva"}
+                          danger={!isCancelled}
+                          onClick={() => setCancelTarget(r)}
+                        >
+                          {isCancelled ? <UndoIcon /> : <CancelIcon />}
                         </IconBtn>
                         <IconBtn title="Editar" onClick={() => setFilters({ ...filters, showModal: true, editing: r })}><PencilIcon /></IconBtn>
                         <IconBtn title="Renovar QR" onClick={() => setRenewTarget(r)}><RefreshIcon /></IconBtn>
@@ -2170,6 +2189,42 @@ function ReservationsTable({
             toast.success('QR renovado e status atualizado.');
           } catch (e: any) {
             const msg = e?.error?.message || e?.message || 'Erro ao renovar QR.';
+            toast.error(msg);
+          }
+        }}
+      />
+
+      {/* Cancelar / Reativar reserva */}
+      <ConfirmDialog
+        open={!!cancelTarget}
+        title={cancelTarget?.status === 'CANCELLED' ? 'Reativar reserva?' : 'Cancelar reserva?'}
+        description={
+          cancelTarget?.status === 'CANCELLED' ? (
+            <div className="space-y-1">
+              <p>A reserva volta para <b>AWAITING_CHECKIN</b> e o cliente é notificado da reativação.</p>
+              {cancelTarget && <p className="text-sm text-muted"><b>Código:</b> <code>{cancelTarget.reservationCode || '—'}</code></p>}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p>A reserva fica com status <b>CANCELLED</b> e o cliente é notificado do cancelamento.</p>
+              {cancelTarget && <p className="text-sm text-muted"><b>Código:</b> <code>{cancelTarget.reservationCode || '—'}</code></p>}
+            </div>
+          )
+        }
+        confirmText={cancelTarget?.status === 'CANCELLED' ? 'Reativar reserva' : 'Cancelar reserva'}
+        loadingText={cancelTarget?.status === 'CANCELLED' ? 'Reativando…' : 'Cancelando…'}
+        variant={cancelTarget?.status === 'CANCELLED' ? 'primary' : 'danger'}
+        onCancel={() => setCancelTarget(null)}
+        onConfirm={async () => {
+          if (!cancelTarget) return;
+          const wasCancelled = cancelTarget.status === 'CANCELLED';
+          try {
+            await api(`/v1/reservations/${cancelTarget.id}/cancel`, { method: 'POST', auth: true });
+            setCancelTarget(null);
+            setFilters({ ...filters });
+            toast.success(wasCancelled ? 'Reserva reativada.' : 'Reserva cancelada.');
+          } catch (e: any) {
+            const msg = e?.error?.message || e?.message || 'Erro ao cancelar reserva.';
             toast.error(msg);
           }
         }}

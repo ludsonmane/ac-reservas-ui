@@ -24,7 +24,7 @@ export type Reservation = {
   source?: string | null;
   zigBillingCents?: number | null;
   zigBilledAt?: string | null;
-  status: 'AWAITING_CHECKIN' | 'CHECKED_IN' | 'NO_SHOW';
+  status: 'AWAITING_CHECKIN' | 'CHECKED_IN' | 'NO_SHOW' | 'CANCELLED';
   qrToken: string;
   qrExpiresAt?: string | null;
   checkedInAt?: string | null;
