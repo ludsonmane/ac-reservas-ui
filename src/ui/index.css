@@ -155,6 +155,7 @@ label > span {
   color: #fff;
   border-color: var(--color-danger);
 }
+.btn-danger:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 .btn-ghost {
   border-color: transparent;
   background: transparent;
