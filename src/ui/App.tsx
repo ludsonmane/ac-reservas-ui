@@ -16,6 +16,7 @@ import AreasPage from './AreasPage';
 import UsersPage from './UsersPage';
 import CheckinPage from './CheckinPage';
 import DashboardPage from './DashboardPage';
+import MetasPage from './MetasPage';
 import LogsPage from './LogsPage';
 import { ensureAnalyticsReady, setActiveUnitPixelFromUnit } from '../lib/analytics';
 import {
@@ -3095,7 +3096,7 @@ function IconBtn({
 export default function App() {
   const { token, user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
-  const [tab, setTab] = useState<'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs'>('reservas');
+  const [tab, setTab] = useState<'dashboard' | 'metas' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs'>('reservas');
 
   const isCheckinRoute = typeof window !== 'undefined' && window.location.pathname.includes('/checkin');
 
@@ -3176,6 +3177,8 @@ export default function App() {
               <NavTabs active={tab} onChange={setTab} isAdmin={isAdmin} />
               {tab === 'dashboard' ? (
                 <DashboardPage />
+              ) : tab === 'metas' ? (
+                <MetasPage />
               ) : tab === 'reservas' ? (
                 <ReservationsPanel />
               ) : tab === 'bloqueios' ? (
@@ -3203,12 +3206,12 @@ function NavTabs({
   onChange,
   isAdmin,
 }: {
-  active: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs';
-  onChange: (t: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs') => void;
+  active: 'dashboard' | 'metas' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs';
+  onChange: (t: 'dashboard' | 'metas' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs') => void;
   isAdmin: boolean;
 }) {
   const items: Array<{
-    key: 'dashboard' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs';
+    key: 'dashboard' | 'metas' | 'reservas' | 'bloqueios' | 'unidades' | 'areas' | 'usuarios' | 'logs';
     label: string;
     icon: React.ReactNode;
     adminOnly?: boolean;
@@ -3222,6 +3225,18 @@ function NavTabs({
             <path d="M7 15v3" />
             <path d="M12 11v7" />
             <path d="M17 7v11" />
+          </svg>
+        ),
+      },
+      {
+        key: 'metas',
+        label: 'Dados de Metas',
+        adminOnly: true,
+        icon: (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="5" />
+            <circle cx="12" cy="12" r="1" />
           </svg>
         ),
       },
