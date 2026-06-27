@@ -29,6 +29,13 @@ type MetaUnit = {
   cancelamentoPct: number;
   checkins: number;
   checkinsSemMesa: number;
+  reservaContexto: {
+    confirmacaoEnvios: number;
+    aniversarioEnvios: number;
+    reforcoEnvios: number;
+    envios: number;
+    gastoEstimadoCents: number | null;
+  };
 };
 
 type MetaResponse = {
@@ -289,6 +296,28 @@ export default function MetasPage() {
         </div>
       ) : null}
 
+      {/* destaque: gasto de contexto de reserva (estimado) */}
+      {totals?.reservaContexto ? (
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-emerald-700">
+                Gasto de contexto de reserva (estimado)
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-emerald-900">
+                {brl(totals.reservaContexto.gastoEstimadoCents)}
+              </div>
+            </div>
+            <div className="text-sm text-emerald-800">
+              {num(totals.reservaContexto.envios)} envios — confirmação{' '}
+              {num(totals.reservaContexto.confirmacaoEnvios)} · aniversário{' '}
+              {num(totals.reservaContexto.aniversarioEnvios)} · reforço{' '}
+              {num(totals.reservaContexto.reforcoEnvios)}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* tabela por unidade */}
       <div className="overflow-x-auto rounded-xl border border-border bg-card/70">
         <table className="w-full min-w-max text-sm">
@@ -298,6 +327,7 @@ export default function MetasPage() {
               <th className="px-3 py-2 text-right">Reservas</th>
               <th className="px-3 py-2 text-right">Envios WA</th>
               <th className="px-3 py-2 text-right">Gasto WA</th>
+              <th className="px-3 py-2 text-right">Reserva*</th>
               <th className="px-3 py-2 text-right">Faturamento</th>
               <th className="px-3 py-2 text-right">Ticket médio</th>
               <th className="px-3 py-2 text-right">% Cancel.</th>
@@ -308,7 +338,7 @@ export default function MetasPage() {
           <tbody>
             {unidades.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center text-muted" colSpan={9}>
+                <td className="px-3 py-6 text-center text-muted" colSpan={10}>
                   {loading ? 'Carregando…' : 'Sem dados no período.'}
                 </td>
               </tr>
@@ -323,6 +353,10 @@ export default function MetasPage() {
                     {u.gastoWhatsappUsd != null ? (
                       <span className="ml-1 text-xs text-muted">({usd(u.gastoWhatsappUsd)})</span>
                     ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {brl(u.reservaContexto.gastoEstimadoCents)}
+                    <span className="ml-1 text-xs text-muted">({num(u.reservaContexto.envios)})</span>
                   </td>
                   <td className="px-3 py-2 text-right">{brl(u.faturamentoCents)}</td>
                   <td className="px-3 py-2 text-right">
@@ -349,6 +383,7 @@ export default function MetasPage() {
                 <td className="px-3 py-2 text-right">{num(totals.reservas)}</td>
                 <td className="px-3 py-2 text-right">{num(totals.envios)}</td>
                 <td className="px-3 py-2 text-right">{brl(totals.gastoWhatsappCents)}</td>
+                <td className="px-3 py-2 text-right">{brl(totals.reservaContexto.gastoEstimadoCents)}</td>
                 <td className="px-3 py-2 text-right">{brl(totals.faturamentoCents)}</td>
                 <td className="px-3 py-2 text-right">{brl(totals.ticketMedioCents)}</td>
                 <td className="px-3 py-2 text-right">
@@ -372,6 +407,13 @@ export default function MetasPage() {
           {data?.fxHistorical ? '' : `, spot ${data?.fxRate ? brl(Math.round(data.fxRate * 100)) : '—'}`}).
         </p>
       ) : null}
+
+      <p className="text-xs text-muted">
+        <strong>* Reserva (estim.):</strong> gasto de WhatsApp de contexto de reserva — confirmação
+        (≈1 por reserva, UTILITY) + aniversário e reforço (campanhas, MARKETING). Envios de
+        aniversário/reforço são exatos; confirmação é estimada pelo nº de reservas. O custo é uma
+        estimativa (fração do gasto da categoria), pois a Meta não fatura por template.
+      </p>
     </div>
   );
 }
